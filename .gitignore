@@ -1,0 +1,5 @@
+node_modules/
+.vscode/
+bin/**/*.js
+.DS_STORE
+yarn-error.log
