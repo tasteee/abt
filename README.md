@@ -1,6 +1,6 @@
 # abt
 
-> A CLI tool that makes it simple as fuck to list and execute npm scripts.
+CLI tool to list, select, and execute npm scripts. (Cross platform.)
 
 ```sh
 npm i -g abt
@@ -17,6 +17,11 @@ abt will show you a list of your scripts and allow you to run them. That is all 
 ![example](https://cdn.rawgit.com/colshacol/abt/332691ed/example.png)
 
 ## Changelog
+
+### 3.0.0 (06/28/2026)
+
+Redid the whole thing because turns out it didn't actually work
+on Windows after all. But now it damn sure does.
 
 ### 2.0.0 (03/29/2025)
 
