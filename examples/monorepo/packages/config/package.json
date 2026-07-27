@@ -1,0 +1,11 @@
+{
+	"name": "config",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Unscoped name, so `abt config <script>` matches on the bare name.",
+	"scripts": {
+		"check": "echo [config] shared config is valid",
+		"foo": "mkdir foofoo"
+	}
+}

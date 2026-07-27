@@ -1,0 +1,10 @@
+import type { ContextT, MenuRowT, TargetPackageT } from './types.js';
+export declare const RUN_PREFIX = "run:";
+export declare const OPEN_PREFIX = "open:";
+export declare const buildRunValue: (scriptName: string) => string;
+export declare const buildOpenValue: (packageRelativePath: string) => string;
+export declare const readRunValue: (value: string) => string | undefined;
+export declare const readOpenValue: (value: string) => string | undefined;
+export declare const buildScriptMenuRows: (targetPackage: TargetPackageT) => MenuRowT[];
+export declare const listBrowsablePackages: (context: ContextT) => TargetPackageT[];
+export declare const buildPackageMenuRows: (context: ContextT) => MenuRowT[];

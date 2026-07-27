@@ -1,0 +1,13 @@
+{
+	"name": "@example/web",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"dependencies": { "@example/ui": "workspace:*", "@example/utils": "workspace:*" },
+	"scripts": {
+		"dev": "echo [web] dev server on http://localhost:3000",
+		"build": "echo [web] building the storefront bundle with code splitting and prerendered routes",
+		"test": "echo [web] 41 passed, 0 failed",
+		"typecheck": "echo [web] no type errors"
+	}
+}

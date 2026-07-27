@@ -1,0 +1,11 @@
+{
+	"name": "@example/utils",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.js",
+	"scripts": {
+		"build": "echo [utils] built",
+		"test": "echo [utils] 9 passed, 0 failed"
+	}
+}

@@ -1,0 +1,13 @@
+{
+	"name": "@example/ui",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.js",
+	"dependencies": { "@example/tokens": "workspace:*" },
+	"scripts": {
+		"build": "echo [ui] built the component library",
+		"test": "echo [ui] 27 passed, 0 failed",
+		"storybook": "echo [ui] storybook on http://localhost:6006"
+	}
+}

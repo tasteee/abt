@@ -1,8 +1,12 @@
 src/
+examples/
+docs/
 .vscode/
+.github/
 .babelrc.js
 .editorconfig
 .prettierrc
 jest.config.js
 yarn-error.log
 yarn.lock
+example.png

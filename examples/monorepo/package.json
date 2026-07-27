@@ -1,0 +1,16 @@
+{
+	"name": "monorepo",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Workspace root. Members live in apps/* and packages/*.",
+	"type": "module",
+	"workspaces": ["apps/*", "packages/*"],
+	"scripts": {
+		"dev": "echo [root] starting every app in parallel",
+		"build": "echo [root] building packages then apps, in dependency order, with remote cache enabled",
+		"test": "echo [root] running every workspace test suite",
+		"lint": "echo [root] no lint errors",
+		"clean": "echo [root] removed every dist/ and node_modules/",
+		"release": "echo [root] published 4 packages"
+	}
+}

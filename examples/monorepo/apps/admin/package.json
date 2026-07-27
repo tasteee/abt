@@ -1,0 +1,12 @@
+{
+	"name": "@example/admin",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"dependencies": { "@example/ui": "workspace:*" },
+	"scripts": {
+		"dev": "echo [admin] dev server on http://localhost:3001",
+		"build": "echo [admin] building the admin console",
+		"test": "echo [admin] 18 passed, 0 failed"
+	}
+}

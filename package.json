@@ -1,16 +1,22 @@
 {
 	"name": "abt",
-	"version": "3.0.1",
-	"description": "CLI tool to list, select, and run npm scripts.",
+	"version": "4.0.0",
+	"description": "CLI tool to list, select, and run npm scripts across a workspace.",
 	"type": "module",
 	"main": "./bin/index.js",
 	"repository": "https://github.com/tasteee/abt",
-	"author": "Rockie Colcleasure <rokkicolcleasure@gmail.com>",
+	"author": "Rockie Colcleasure <shanecolcleasure@gmail.com>",
 	"license": "MIT",
 	"preferGlobal": true,
+	"engines": {
+		"node": "^18.19.0 || >=20.5.0"
+	},
 	"bin": {
 		"abt": "./bin/index.js"
 	},
+	"files": [
+		"bin"
+	],
 	"scripts": {
 		"start": "node bin",
 		"build": "tsc",
@@ -24,9 +30,8 @@
 		"typescript": "^6.0.3"
 	},
 	"dependencies": {
-		"@types/find-pkg": "^2.0.0",
 		"execa": "^9.6.1",
-		"find-pkg": "^2.0.0",
-		"inquirer": "^12.5.0"
+		"pathenger": "^1.1.0",
+		"picocolors": "^1.1.1"
 	}
 }

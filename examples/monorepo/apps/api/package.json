@@ -1,0 +1,14 @@
+{
+	"name": "@example/api",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"dependencies": { "@example/utils": "workspace:*" },
+	"scripts": {
+		"dev": "echo [api] listening on http://localhost:4000",
+		"build": "echo [api] compiled to dist/",
+		"test": "echo [api] 63 passed, 0 failed",
+		"migrate": "echo [api] applied 2 migrations",
+		"seed": "echo [api] seeded 120 rows"
+	}
+}

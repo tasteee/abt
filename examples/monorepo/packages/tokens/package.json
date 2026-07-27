@@ -1,0 +1,8 @@
+{
+	"name": "@example/tokens",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Deliberately has no scripts, so abt should omit it from the menu.",
+	"main": "./index.json"
+}
