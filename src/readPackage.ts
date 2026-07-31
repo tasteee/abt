@@ -6,6 +6,9 @@ export type PackageJsonT = {
 	name?: string
 	scripts?: ScriptsByNameT
 	workspaces?: string[] | { packages?: string[] }
+	dependencies?: Record<string, string>
+	peerDependencies?: Record<string, string>
+	devDependencies?: Record<string, string>
 }
 
 // A package.json that exists but does not parse is a real problem

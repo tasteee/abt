@@ -33,3 +33,20 @@ export type ParsedArgumentsT = {
 	wantsList: boolean
 	positionals: string[]
 }
+
+export const DependencySection = {
+	dependencies: 'dependencies',
+	peerDependencies: 'peerDependencies',
+	devDependencies: 'devDependencies'
+} as const
+
+export type DependencySectionT = (typeof DependencySection)[keyof typeof DependencySection]
+
+export type DependencyEntryT = {
+	name: string
+	section: DependencySectionT
+	declaredVersion: string
+	installedVersion?: string
+	latestVersion?: string
+	latestError?: string
+}

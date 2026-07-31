@@ -21,16 +21,17 @@
 		"start": "node bin",
 		"build": "tsc",
 		"typecheck": "tsc --noEmit",
+		"test": "npm run build && node --test",
 		"build-run": "npm run build && npm start",
 		"prepublishOnly": "npm run build"
 	},
 	"devDependencies": {
-		"@types/node": "^26.0.1",
-		"prettier": "^1.11.1",
-		"typescript": "^6.0.3"
+		"@types/node": "26.1.2",
+		"prettier": "3.9.6",
+		"typescript": "7.0.2"
 	},
 	"dependencies": {
-		"execa": "^9.6.1",
+		"execa": "10.0.1",
 		"pathenger": "^1.1.0",
 		"picocolors": "^1.1.1"
 	}

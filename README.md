@@ -53,6 +53,44 @@ Workspaces are detected from `pnpm-workspace.yaml` or a `workspaces` field in
 In a pipe or in CI, `abt` prints the script list instead of blocking on a menu
 nobody can answer. It always exits with the script's own exit code.
 
+## Dependencies
+
+```sh
+abt deps               # dependencies of the package you are in
+abt deps web           # dependencies of a workspace package
+```
+
+`abt deps` presents `dependencies`, `peerDependencies`, and `devDependencies`
+as a focused `package.json` fragment, with installed and latest versions in an
+action rail beside each declaration:
+
+```
+"dependencies": {
+  "execa": "^9.6.1"  │ [1] pin installed 9.6.1 - [2] pin latest 10.0.1 major
+},
+"devDependencies": {
+  "typescript": "^6.0.3"  │ [1] pin installed 6.0.3 - [2] pin latest 7.0.2 major
+}
+```
+
+The fragment deliberately omits the outermost `{` and `}`. It preserves the
+section and dependency order from the real manifest, while navigation skips
+the structural lines.
+
+Move with the arrow keys. Press `1` to stage the exact version that is currently
+installed, or `2` to stage the exact latest registry version. The JSON preview
+updates immediately, but `package.json` is not written until `enter`; `escape`
+discards the staged changes. A major upgrade requires a second `enter` before it
+is applied.
+
+Applying updates only the selected values in `package.json`; it does not install
+packages or rewrite the lockfile. The final message reminds you to run your
+package manager's install command.
+
+Workspace, file, URL, Git, and npm-alias specs are still listed, but registry
+updates are disabled for them. If the command is piped or run in CI, it prints a
+tab-separated report and never attempts an edit.
+
 ## Design
 
 [docs/premium-cli-dx.md](docs/premium-cli-dx.md) covers what a premium CLI
@@ -60,6 +98,13 @@ experience means here, and why workspace packages are listed beneath the current
 package's scripts rather than chosen first.
 
 ## Changelog
+
+### Next
+
+Added `abt deps` with a native JSON-fragment editor; declared, installed, and
+latest versions; staged pin/latest actions; major-upgrade confirmation;
+viewport-aware navigation; workspace package targeting; and a plain
+non-interactive report.
 
 ### 4.0.0
 

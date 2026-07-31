@@ -19,18 +19,27 @@ export const printHelp = (version: string): void => {
 		`  abt <package>          ${dim('pick a script from a workspace package')}`,
 		`  abt <package> <script> ${dim('run a script in a workspace package')}`,
 		`  abt <script> -- <args> ${dim('forward arguments to the script')}`,
+		`  abt deps               ${dim('inspect dependencies here')}`,
+		`  abt deps <package>     ${dim('inspect a workspace package')}`,
 		'',
 		bold('Flags'),
 		`  -l, --list             ${dim('print every script, one per line')}`,
 		`  -v, --version          ${dim('print the abt version')}`,
 		`  -h, --help             ${dim('show this help')}`,
 		'',
-		bold('In the menu'),
+		bold('In the script menu'),
 		`  ↑ ↓                    ${dim('move')}`,
 		`  enter                  ${dim('select')}`,
 		`  tab                    ${dim('browse workspace packages')}`,
 		`  escape                 ${dim('back')}`,
-		`  ctrl+c                 ${dim('quit')}`
+		`  ctrl+c                 ${dim('quit')}`,
+		'',
+		bold('In the dependency list'),
+		`  ↑ ↓                    ${dim('move')}`,
+		`  1                      ${dim('stage the installed version')}`,
+		`  2                      ${dim('stage the exact latest version')}`,
+		`  enter                  ${dim('apply staged changes')}`,
+		`  escape                 ${dim('discard changes and quit')}`
 	]
 
 	for (const line of lines) writeLine(line)

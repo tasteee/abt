@@ -10,6 +10,7 @@ import { resolveTarget } from './resolveTarget.js'
 import { runInteractiveFlow, runPackageScriptFlow } from './flow.js'
 import { describeRunCommand, runScript } from './runScript.js'
 import { dim } from './theme.js'
+import { runDependencyCommand } from './dependencyCommand.js'
 import type { ResolutionT } from './resolveTarget.js'
 import type { ContextT } from './types.js'
 
@@ -119,6 +120,11 @@ const main = async (): Promise<number> => {
 	if (split.parsed.wantsList) {
 		printScriptList(context)
 		return 0
+	}
+
+	const wantsDependencies = split.parsed.positionals[0] === 'deps'
+	if (wantsDependencies) {
+		return await runDependencyCommand(context, split.parsed.positionals.slice(1), checkIsInteractiveTerminal())
 	}
 
 	const resolution = resolveTarget(context, split.parsed.positionals)

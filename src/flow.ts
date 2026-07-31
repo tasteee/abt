@@ -35,13 +35,11 @@ const describeLocation = (targetPackage: TargetPackageT): string => {
 	return targetPackage.relativePath
 }
 
-// A plain repo has only one place to be, so naming it is noise.
-// Anywhere a second location exists, the header says where you are.
-const buildHeader = (context: ContextT, targetPackage: TargetPackageT): string => {
-	const isSoleLocation = !context.isWorkspace && targetPackage.relativePath === '.'
-	if (isSoleLocation) return accent('abt')
+const buildLocationHeader = (targetPackage: TargetPackageT): string => {
 	return `${accent('abt')} ${dim('·')} ${describeLocation(targetPackage)}`
 }
+
+const CHOOSE_SCRIPT_HEADER = '[ abt ∆ choose a script ]'
 
 export type FlowOutcomeT = {
 	exitCode: number
@@ -51,7 +49,11 @@ export type FlowOutcomeT = {
 // The default menu is the scripts of the package you are standing
 // in — nothing else. Tab opens the package list, selecting one
 // shows its scripts, and escape walks back up either step.
-export const runInteractiveFlow = async (context: ContextT, forwardedArguments: string[]): Promise<FlowOutcomeT> => {
+export const runInteractiveFlow = async (
+	context: ContextT,
+	forwardedArguments: string[],
+	header = CHOOSE_SCRIPT_HEADER
+): Promise<FlowOutcomeT> => {
 	const flow = Pathenger.create<StoreT, ResultsT>({
 		store: { openedPackagePath: '', selectedScriptName: '', exitCode: 0 }
 	})
@@ -137,7 +139,7 @@ export const runInteractiveFlow = async (context: ContextT, forwardedArguments: 
 
 	const PickScript = Pathenger.createSelectInputStep({
 		id: 'pickScript',
-		message: buildHeader(context, context.currentPackage),
+		message: header,
 		tip: packageTip,
 		options: () => buildOptions(buildScriptMenuRows(context.currentPackage)),
 		keys: packageKeyBindings,
@@ -171,5 +173,5 @@ export const runPackageScriptFlow = async (
 		isWorkspace: false
 	}
 
-	return await runInteractiveFlow(scopedContext, forwardedArguments)
+	return await runInteractiveFlow(scopedContext, forwardedArguments, buildLocationHeader(targetPackage))
 }

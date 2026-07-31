@@ -1,0 +1,208 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import test from 'node:test'
+import {
+	buildDependencyEntries,
+	isRegistryDependency,
+	loadLatestVersions,
+	readInstalledVersion
+} from '../bin/dependencies.js'
+import { buildDependencyScreen, isMajorUpgrade } from '../bin/dependencyFlow.js'
+import { updateDependencyVersion, updateDependencyVersions } from '../bin/updateDependency.js'
+
+const makeTemporaryDirectory = () => fs.mkdtempSync(path.join(os.tmpdir(), 'abt-deps-'))
+
+test('identifies major upgrades from the declared manifest version', () => {
+	assert.equal(isMajorUpgrade('^9.6.1', '10.0.1'), true)
+	assert.equal(isMajorUpgrade('^9.6.1', '9.8.0'), false)
+	assert.equal(isMajorUpgrade('workspace:*', '2.0.0'), false)
+})
+
+test('does not offer registry actions for local and aliased specs', () => {
+	assert.equal(isRegistryDependency('workspace:*'), false)
+	assert.equal(isRegistryDependency('file:../shared'), false)
+	assert.equal(isRegistryDependency('https://example.com/package.tgz'), false)
+	assert.equal(isRegistryDependency('npm:other-package@^1.0.0'), false)
+	assert.equal(isRegistryDependency('^1.0.0'), true)
+})
+
+test('finds an installed package hoisted to the workspace root', () => {
+	const workspaceRoot = makeTemporaryDirectory()
+	const packageDirectory = path.join(workspaceRoot, 'packages', 'web')
+	const installedDirectory = path.join(workspaceRoot, 'node_modules', '@scope', 'tool')
+	fs.mkdirSync(packageDirectory, { recursive: true })
+	fs.mkdirSync(installedDirectory, { recursive: true })
+	fs.writeFileSync(path.join(installedDirectory, 'package.json'), '{"version":"3.4.5"}')
+
+	assert.equal(readInstalledVersion('@scope/tool', packageDirectory, workspaceRoot), '3.4.5')
+})
+
+test('builds dependency entries in manifest order', () => {
+	const packageDirectory = makeTemporaryDirectory()
+	const targetPackage = {
+		name: 'fixture',
+		directory: packageDirectory,
+		relativePath: '.',
+		isRoot: true,
+		scriptsByName: {}
+	}
+
+	const entries = buildDependencyEntries(targetPackage, packageDirectory, {
+		devDependencies: { typescript: '^6.0.0' },
+		dependencies: { zebra: '^1.0.0', alpha: '^2.0.0' },
+		peerDependencies: { react: '^19.0.0' }
+	})
+
+	assert.deepEqual(
+		entries.map(entry => `${entry.section}:${entry.name}`),
+		['devDependencies:typescript', 'dependencies:zebra', 'dependencies:alpha', 'peerDependencies:react']
+	)
+})
+
+test('renders a package.json fragment without outer braces', () => {
+	const targetPackage = {
+		name: 'fixture',
+		directory: '.',
+		relativePath: 'packages/web',
+		isRoot: false,
+		scriptsByName: {}
+	}
+	const entries = [
+		{
+			name: 'execa',
+			section: 'dependencies',
+			declaredVersion: '^9.6.1',
+			installedVersion: '9.6.1',
+			latestVersion: '10.0.1'
+		},
+		{
+			name: 'typescript',
+			section: 'devDependencies',
+			declaredVersion: '^6.0.3',
+			installedVersion: '6.0.3',
+			latestVersion: '7.0.2'
+		}
+	]
+
+	const screen = buildDependencyScreen(entries, targetPackage, 0, new Map(), '').join('\n')
+	const plainScreen = screen.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, '')
+
+	assert.match(plainScreen, /"dependencies": \{/)
+	assert.match(plainScreen, /"execa": "\^9\.6\.1"/)
+	assert.match(plainScreen, /\[1\] pin installed 9\.6\.1 - \[2\] pin latest 10\.0\.1 major/)
+	assert.match(plainScreen, /\},\n  "devDependencies": \{/)
+	assert.doesNotMatch(plainScreen, /\n  \{\n/)
+
+	const stagedScreen = buildDependencyScreen(
+		entries,
+		targetPackage,
+		0,
+		new Map([
+			[
+				0,
+				{
+					entryIndex: 0,
+					name: 'execa',
+					from: '^9.6.1',
+					to: '10.0.1',
+					kind: 'latest',
+					isMajor: true
+				}
+			]
+		]),
+		''
+	)
+		.join('\n')
+		.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, '')
+
+	assert.match(stagedScreen, /"execa": "10\.0\.1"/)
+	assert.match(stagedScreen, /was \^9\.6\.1 - staged \[2\] pin latest 10\.0\.1 · major/)
+})
+
+test('updates only the selected dependency string and preserves formatting', () => {
+	const packageDirectory = makeTemporaryDirectory()
+	const packageJson = [
+		'{',
+		'\t"name": "fixture",',
+		'\t"files": ["bin"],',
+		'\t"dependencies": {',
+		'\t\t"@scope/tool": "^1.2.3",',
+		'\t\t"other": "~4.0.0"',
+		'\t},',
+		'\t"private": true',
+		'}',
+		''
+	].join('\r\n')
+	fs.writeFileSync(path.join(packageDirectory, 'package.json'), packageJson)
+
+	updateDependencyVersion(packageDirectory, 'dependencies', '@scope/tool', '^1.2.3', '1.2.3')
+
+	const updated = fs.readFileSync(path.join(packageDirectory, 'package.json'), 'utf-8')
+	assert.equal(updated, packageJson.replace('"@scope/tool": "^1.2.3"', '"@scope/tool": "1.2.3"'))
+})
+
+test('updates a dependency in a minified manifest', () => {
+	const packageDirectory = makeTemporaryDirectory()
+	const packageJson = '{"name":"fixture","dependencies":{"one":"^1.0.0"},"nested":{"one":"untouched"}}'
+	fs.writeFileSync(path.join(packageDirectory, 'package.json'), packageJson)
+
+	updateDependencyVersion(packageDirectory, 'dependencies', 'one', '^1.0.0', '2.0.0')
+
+	assert.equal(
+		fs.readFileSync(path.join(packageDirectory, 'package.json'), 'utf-8'),
+		'{"name":"fixture","dependencies":{"one":"2.0.0"},"nested":{"one":"untouched"}}'
+	)
+})
+
+test('refuses to overwrite a dependency that changed after inspection', () => {
+	const packageDirectory = makeTemporaryDirectory()
+	fs.writeFileSync(path.join(packageDirectory, 'package.json'), '{"dependencies":{"one":"^2.0.0"}}')
+
+	assert.throws(
+		() => updateDependencyVersion(packageDirectory, 'dependencies', 'one', '^1.0.0', '1.0.0'),
+		/changed on disk/
+	)
+})
+
+test('applies several staged dependency changes in one manifest write', () => {
+	const packageDirectory = makeTemporaryDirectory()
+	fs.writeFileSync(
+		path.join(packageDirectory, 'package.json'),
+		'{"dependencies":{"one":"^1.0.0"},"devDependencies":{"two":"^2.0.0"}}'
+	)
+
+	updateDependencyVersions(packageDirectory, [
+		{ section: 'dependencies', packageName: 'one', currentVersion: '^1.0.0', nextVersion: '1.4.0' },
+		{ section: 'devDependencies', packageName: 'two', currentVersion: '^2.0.0', nextVersion: '3.0.0' }
+	])
+
+	assert.equal(
+		fs.readFileSync(path.join(packageDirectory, 'package.json'), 'utf-8'),
+		'{"dependencies":{"one":"1.4.0"},"devDependencies":{"two":"3.0.0"}}'
+	)
+})
+
+test('loads latest versions from a registry endpoint', async () => {
+	const http = await import('node:http')
+	const server = http.createServer((_request, response) => {
+		response.setHeader('content-type', 'application/json')
+		response.end('{"version":"9.8.7"}')
+	})
+
+	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+	const address = server.address()
+	assert.notEqual(address, null)
+	assert.equal(typeof address, 'object')
+
+	try {
+		const entries = await loadLatestVersions(
+			[{ name: '@scope/tool', section: 'dependencies', declaredVersion: '^1.0.0' }],
+			`http://127.0.0.1:${address.port}`
+		)
+		assert.equal(entries[0].latestVersion, '9.8.7')
+	} finally {
+		server.close()
+	}
+})

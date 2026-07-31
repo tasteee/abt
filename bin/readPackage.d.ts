@@ -5,6 +5,9 @@ export type PackageJsonT = {
     workspaces?: string[] | {
         packages?: string[];
     };
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
 };
 export declare const readPackageJson: (packageJsonPath: string) => PackageJsonT | undefined;
 export declare const readPackageJsonInDirectory: (directory: string) => PackageJsonT | undefined;
