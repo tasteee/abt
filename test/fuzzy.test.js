@@ -2,13 +2,36 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { isPrintableInput, listFilteredDependencyIndexes } from '../bin/dependencyFlow.js'
 import { fuzzyFilter, fuzzyScore } from '../bin/fuzzy.js'
-import { isPrintableFuzzyInput } from '../bin/fuzzySelect.js'
+import { isPrintableFuzzyInput, shouldTriggerTabAction } from '../bin/fuzzySelect.js'
+import { buildPackageHeader, buildScriptHeader, shouldReturnFromPackagePicker } from '../bin/flow.js'
 
 test('does not treat arrow keypresses without text payloads as filter input', () => {
 	const rightArrow = { name: 'right' }
 	assert.equal(isPrintableInput(undefined, rightArrow), false)
 	assert.equal(isPrintableFuzzyInput(undefined, rightArrow), false)
 	assert.equal(isPrintableInput('t', { name: 't' }), true)
+})
+
+test('uses tab as a symmetric scripts and packages context switch', () => {
+	assert.equal(shouldTriggerTabAction('tab', 'packages'), true)
+	assert.equal(shouldTriggerTabAction('tab', 'scripts'), true)
+	assert.equal(shouldTriggerTabAction('tab', undefined), false)
+	assert.equal(shouldReturnFromPackagePicker('tab'), true)
+	assert.equal(shouldReturnFromPackagePicker('back'), true)
+	assert.equal(shouldReturnFromPackagePicker('selected'), false)
+})
+
+test('picker headers include the resolved package.json name', () => {
+	const targetPackage = {
+		name: '@example/web',
+		directory: '.',
+		relativePath: 'apps/web',
+		isRoot: false,
+		scriptsByName: {},
+		scriptDescriptionsByName: {}
+	}
+	assert.equal(buildScriptHeader(targetPackage), '[ abt ∆ choose a script ]  @example/web')
+	assert.equal(buildPackageHeader(targetPackage), '[ abt ∆ choose a package ]  @example/web')
 })
 
 test('scores exact, prefix, contained, and subsequence fuzzy matches in that order', () => {

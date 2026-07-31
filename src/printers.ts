@@ -47,7 +47,7 @@ export const printHelp = (version: string): void => {
 		keyHelp(marks.right, 'show commands when descriptions exist'),
 		keyHelp(marks.left, 'return to descriptions'),
 		keyHelp('enter', 'select'),
-		keyHelp('tab', 'browse workspace packages'),
+		keyHelp('tab', 'toggle scripts and workspace packages'),
 		keyHelp('escape', 'clear the filter, then go back'),
 		keyHelp('ctrl+c', 'quit'),
 		'',

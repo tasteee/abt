@@ -25,7 +25,7 @@ export type CliEventT =
 	| { type: 'version'; version: string }
 	| { type: 'script:list'; scripts: ScriptResultT[] }
 	| { type: 'dependency:report'; package: string; dependencies: DependencyEntryT[] }
-	| { type: 'dependency:empty'; package: string }
+	| { type: 'dependency:empty'; package: string; packageName: string }
 	| { type: 'dependency:changed'; package: string; dryRun: boolean; changes: DependencyChangeResultT[] }
 	| { type: 'notice'; level: 'info' | 'warning' | 'error'; title: string; body?: string; verboseOnly?: boolean }
 
@@ -71,7 +71,7 @@ export class PlainRenderer implements CliRendererT {
 			return
 		}
 		if (event.type === 'dependency:empty') {
-			writeResult(`abt ${event.package} has no dependencies.\n`)
+			writeResult(`${event.packageName} has no dependencies.\n`)
 			return
 		}
 		if (event.type === 'dependency:report') {
@@ -135,7 +135,13 @@ export class JsonRenderer implements CliRendererT {
 		else if (event.type === 'dependency:report') {
 			this.result = { command: 'deps', package: event.package, dependencies: event.dependencies, changes: [] }
 		} else if (event.type === 'dependency:empty') {
-			this.result = { command: 'deps', package: event.package, dependencies: [], changes: [] }
+			this.result = {
+				command: 'deps',
+				package: event.package,
+				packageName: event.packageName,
+				dependencies: [],
+				changes: []
+			}
 		} else if (event.type === 'dependency:changed') {
 			this.result = { command: 'deps', package: event.package, dryRun: event.dryRun, changes: event.changes }
 		}

@@ -13,6 +13,7 @@ import { LiveTerminal } from '../bin/liveTerminal.js'
 
 const workspace = path.resolve(import.meta.dirname, '..')
 const executable = path.join(workspace, 'bin', 'index.js')
+const packageVersion = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8')).version
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/
 const isolatedHistoryPath = path.join(os.tmpdir(), `abt-cli-history-${process.pid}.json`)
 
@@ -62,7 +63,7 @@ test('version output follows the selected renderer contract', () => {
 	const plain = run(['--version'])
 	assert.match(plain.stdout, /^\d+\.\d+\.\d+\n$/)
 	const json = JSON.parse(run(['--version', '--json']).stdout)
-	assert.deepEqual(json, { ok: true, command: 'version', version: '4.0.0' })
+	assert.deepEqual(json, { ok: true, command: 'version', version: packageVersion })
 })
 
 test('JSON failures remain machine-readable and use stderr only for human output', () => {
@@ -127,6 +128,22 @@ test('dependency reports remain plain and parseable through redirected streams',
 	assert.equal(document.command, 'deps')
 	assert.ok(Array.isArray(document.dependencies))
 	assert.equal(json.stderr, '')
+})
+
+test('empty dependency output uses the nearest package.json name', () => {
+	const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'abt-empty-deps-'))
+	const nestedDirectory = path.join(fixture, 'src', 'nested')
+	fs.mkdirSync(nestedDirectory, { recursive: true })
+	fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({ name: '@example/empty-package' }))
+	const result = spawnSync(process.execPath, [executable, 'deps'], {
+		cwd: nestedDirectory,
+		encoding: 'utf8',
+		timeout: 5000,
+		env: { ...process.env, NO_COLOR: '1', ABT_HISTORY_PATH: isolatedHistoryPath }
+	})
+	assert.equal(result.status, 0)
+	assert.equal(result.stdout, '@example/empty-package has no dependencies.\n')
+	assert.equal(result.stderr, '')
 })
 
 test('direct script execution preserves clean child output and exit status', () => {
@@ -265,13 +282,14 @@ test('plain, silent, interactive, JSON, and test renderers honor their output co
 
 	const json = new JsonRenderer()
 	const jsonOutput = await captureWrites(async () => {
-		json.emit({ type: 'dependency:empty', package: '.' })
+		json.emit({ type: 'dependency:empty', package: '.', packageName: 'fixture' })
 		await json.flush()
 	})
 	assert.deepEqual(JSON.parse(jsonOutput.stdout), {
 		ok: true,
 		command: 'deps',
 		package: '.',
+		packageName: 'fixture',
 		dependencies: [],
 		changes: []
 	})

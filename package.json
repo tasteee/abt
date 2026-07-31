@@ -1,6 +1,6 @@
 {
 	"name": "abt",
-	"version": "4.0.0",
+	"version": "5.0.0",
 	"description": "CLI tool to list, select, and run npm scripts across a workspace.",
 	"type": "module",
 	"main": "./bin/index.js",

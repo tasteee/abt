@@ -86,7 +86,11 @@ export const runDependencyCommand = async (
 
 	const localEntries = buildDependencyEntries(targetPackage, context.workspace.rootDirectory, packageJson)
 	if (localEntries.length === 0) {
-		options.renderer.emit({ type: 'dependency:empty', package: targetPackage.relativePath })
+		options.renderer.emit({
+			type: 'dependency:empty',
+			package: targetPackage.relativePath,
+			packageName: targetPackage.name
+		})
 		return 0
 	}
 	options.renderer.emit({

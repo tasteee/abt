@@ -36,6 +36,7 @@ export type CliEventT = {
 } | {
     type: 'dependency:empty';
     package: string;
+    packageName: string;
 } | {
     type: 'dependency:changed';
     package: string;

@@ -17,9 +17,10 @@ export type FuzzySelectOutcomeT = {
 };
 export declare const isPrintableFuzzyInput: (input: string | undefined, key: readline.Key) => boolean;
 export declare const chooseDetailMode: (showsCommands: boolean, keyName: string | undefined) => boolean;
+export declare const shouldTriggerTabAction: (keyName: string | undefined, tabActionLabel: string | undefined) => boolean;
 export declare const runFuzzySelect: (config: {
     title: string;
     items: FuzzySelectItemT[];
     canGoBack?: boolean;
-    canOpenPackages?: boolean;
+    tabActionLabel?: string;
 }) => Promise<FuzzySelectOutcomeT>;

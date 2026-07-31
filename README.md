@@ -7,35 +7,71 @@ CLI tool to list, select, and execute package scripts — across a workspace.
 npm i -g abt
 ```
 
+## Developing locally
+
+Build and link ABT from the repository root when testing local changes:
+
+```sh
+pnpm install
+pnpm run build
+npm link
+abt --version
+```
+
+`npm link` must run from the ABT repository root—not from one of the example
+packages. It replaces the globally resolved `abt` command with a link to the
+current checkout. `abt --version` should report the version in this repository
+before testing new behavior.
+
+The single-package example includes configured script descriptions:
+
+```sh
+cd examples/solo
+abt
+```
+
+The initial menu mixes descriptions with commands. Press Right Arrow to show
+all commands and Left Arrow to restore descriptions. Remove the global link with
+`npm unlink --global abt` when it is no longer needed.
+
 ## Usage
 
 ```sh
 abt
 ```
 
-`abt` shows the scripts of the package you are standing in. Pick one and it runs.
-Start typing to fuzzy-filter by script name or command. Backspace edits the
-query; Escape clears it before leaving the menu.
+`abt` finds the nearest `package.json` at or above the current directory and
+shows that package's scripts. Pick one and it runs. Start typing to fuzzy-filter
+by script name, description, or command. Backspace edits the query; Escape
+clears it before leaving the menu.
 
 ```
-? abt · apps/web
-❯ dev        vite
-  build      tsc && vite build
-  test       vitest run
-  tab to browse packages
+[ abt ∆ choose a script ]  monorepo
+filter: (type to filter…)
+❯ dev       echo [root] starting every app in parallel
+  build     echo [root] building packages then apps, in dependency order…
+  test      echo [root] running every workspace test suite
+  lint      echo [root] no lint errors
+↑↓ move · enter select · esc cancel · tab packages
 ```
 
-In a monorepo, `tab` opens the rest of the workspace. Pick a package to see its
-scripts; `escape` walks back up either step.
+In a monorepo, `tab` switches from scripts to the workspace package list. Press
+`tab` again to return to the scripts you came from. Pick a package to see its
+scripts. With an empty filter, `escape` returns from package scripts to the
+package list, returns from the package list to the starting scripts, or cancels
+the starting menu.
 
 ```
-? abt · packages
-❯ root     6 scripts · workspace root
+[ abt ∆ choose a package ]  monorepo
+filter: (type to filter…)
+❯ root     6 scripts · workspace root · you are here
   admin    3 scripts · apps/admin
   api      5 scripts · apps/api
+  config   2 scripts · packages/config
   ui       3 scripts · packages/ui
-  web      4 scripts · apps/web · you are here
-  escape to go back
+  utils    2 scripts · packages/utils
+  web      4 scripts · apps/web
+↑↓ move · enter select · esc back · tab scripts
 ```
 
 Once you know the answer, skip the menu:
@@ -81,9 +117,9 @@ including beside `package.json`:
 
 File values override matching `package.json#abt.scripts` values. Entries that
 do not name a real package script are ignored. Discovery does not descend into
-nested packages, common generated directories, version-control data, or dependencies. More
-than one applicable `abt.json` is reported as ambiguous instead of being
-resolved by an invisible precedence rule.
+nested packages, common generated directories, version-control data, or
+dependencies. More than one applicable `abt.json` is reported as ambiguous
+instead of being resolved by an invisible precedence rule.
 
 The default menu is intentionally mixed: configured scripts show their
 description and unconfigured scripts show their command. Press Right Arrow to
@@ -101,12 +137,14 @@ per package, and never prevents execution if the history location is read-only.
 
 History is stored at `%LOCALAPPDATA%\abt\history.json` on Windows,
 `~/Library/Application Support/abt/history.json` on macOS, and
-`${XDG_STATE_HOME:-~/.local/state}/abt/history.json` elsewhere. Set
-`ABT_HISTORY_PATH` to use a different file.
+`$XDG_STATE_HOME/abt/history.json` elsewhere when `XDG_STATE_HOME` is set,
+falling back to `~/.local/state/abt/history.json`. Set `ABT_HISTORY_PATH` to use
+a different file.
 
 Workspaces are detected from `pnpm-workspace.yaml` or a `workspaces` field in
-`package.json`. The package manager comes from `packageManager` in
-`package.json`, falling back to whichever lockfile sits at the workspace root.
+`package.json`. The package manager comes from `packageManager` in the workspace
+root's `package.json`, falling back to whichever lockfile sits at that root and
+then to npm.
 
 In a pipe or in CI, `abt` prints the script list instead of blocking on a menu
 nobody can answer. It always exits with the script's own exit code.
@@ -128,7 +166,8 @@ abt deps --json
 
 `abt deps` presents `dependencies`, `peerDependencies`, and `devDependencies`
 as a responsive JSON-table hybrid. The colon remains the hinge between the
-manifest declaration and the installed, same-major, and latest registry values:
+manifest declaration and the installed version plus the same-major and latest
+registry versions:
 
 ```
                          declared    installed    major       latest
@@ -153,8 +192,9 @@ Typing fuzzy-filters dependency names and focuses the best match. Backspace
 edits the filter; Escape clears an active filter before cancelling the command.
 
 At compact widths the name column contracts. At narrow widths the rows return
-to a compact JSON fragment and the selected dependency's four values appear on
-one detail line.
+to a compact JSON fragment with a selected-row detail line. Extremely narrow
+terminals show only the focused version on that line so every row stays within
+the viewport.
 
 Applying updates only the selected values in `package.json`; it does not install
 packages or rewrite the lockfile. The final message reminds you to run your
@@ -164,17 +204,22 @@ For automation, repeat `--update <package>=installed|major|latest`. The choice i
 explicit, so no confirmation prompt is opened. Add `--dry-run` to produce the
 same change receipt without writing `package.json`.
 
-Workspace, file, URL, Git, and npm-alias specs are still listed, but registry
-updates are disabled for them. If the command is piped or run in CI, it prints a
-tab-separated report and never attempts an edit.
+Workspace, file, link, URL, Git, and npm-alias specs are still listed, but
+registry updates are disabled for them. Without an explicit `--update`, a piped
+or CI invocation prints a tab-separated report and never attempts an edit.
+Explicit non-interactive updates behave the same in a terminal, pipe, or CI. A
+package with no dependency sections prints `<package.json name> has no
+dependencies.`
 
 ### JSON contract
 
 `abt --version --json`, `abt --list --json`, and `abt deps --json` write exactly
 one JSON document to standard output and never include ANSI control sequences.
 Successful documents have `ok: true` plus a stable `command` discriminator.
-Script results use a `scripts` array; dependency reports use `package`,
-`dependencies`, and `changes`; dependency updates additionally use `dryRun`.
+Version results use `version`; script results use a `scripts` array; dependency
+reports use `package`, `dependencies`, and `changes`; empty dependency results
+also include `packageName`; dependency updates use `package`, `dryRun`, and
+`changes`.
 
 Failures use this shape and a nonzero exit status:
 
@@ -190,20 +235,21 @@ Failures use this shape and a nonzero exit status:
 }
 ```
 
-Exit statuses are `0` for success, `1` for an internal runtime failure, `2` for
+Exit statuses are `0` for success, `1` for lookup or runtime failure, `2` for
 usage/environment errors, `127` when the package manager cannot start, and
 `130` when an interactive operation is cancelled with Ctrl+C. Executed scripts
-otherwise preserve their own exit status.
+otherwise preserve their own exit status; leaving a menu with Escape returns
+`0`.
 
 ## Design
 
 [docs/premium-cli-dx.md](docs/premium-cli-dx.md) covers what a premium CLI
-experience means here, and why workspace packages are listed beneath the current
-package's scripts rather than chosen first.
+experience means here, and why workspace packages stay one Tab press away from
+the current package's scripts rather than being chosen first.
 
 ## Changelog
 
-### Next
+### 5.0.0
 
 Added `abt deps` with a responsive JSON-table editor; declared, installed,
 same-major, and latest versions; staged column actions; a before/after review

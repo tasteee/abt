@@ -63,6 +63,10 @@ export const chooseDetailMode = (showsCommands: boolean, keyName: string | undef
 	return showsCommands
 }
 
+export const shouldTriggerTabAction = (keyName: string | undefined, tabActionLabel: string | undefined): boolean => {
+	return keyName === 'tab' && tabActionLabel !== undefined
+}
+
 const buildVisibleItems = <T>(items: T[], selectedIndex: number, pageSize: number): T[] => {
 	let startIndex = Math.max(0, selectedIndex - Math.floor(pageSize / 2))
 	startIndex = Math.min(startIndex, Math.max(0, items.length - pageSize))
@@ -73,7 +77,7 @@ export const runFuzzySelect = async (config: {
 	title: string
 	items: FuzzySelectItemT[]
 	canGoBack?: boolean
-	canOpenPackages?: boolean
+	tabActionLabel?: string
 }): Promise<FuzzySelectOutcomeT> => {
 	const keypressQueue = createKeypressQueue()
 	const terminal = new LiveTerminal()
@@ -114,7 +118,7 @@ export const runFuzzySelect = async (config: {
 				? ` ${marks.bullet} ${firstVisibleIndex + 1}${marks.range}${firstVisibleIndex + visibleItems.length} of ${matches.length}`
 				: ''
 		const backLabel = query.length > 0 ? 'esc clear' : config.canGoBack === true ? 'esc back' : 'esc cancel'
-		const packageLabel = config.canOpenPackages === true ? ` ${marks.bullet} tab packages` : ''
+		const tabLabel = config.tabActionLabel === undefined ? '' : ` ${marks.bullet} tab ${config.tabActionLabel}`
 		const canSwitchDetails = config.items.some(item => item.alternateLabel !== undefined && item.alternateLabel !== item.label)
 		const detailLabel = canSwitchDetails
 			? ` ${marks.bullet} ${showsCommands ? `${marks.left} descriptions` : `${marks.right} commands`}`
@@ -122,7 +126,7 @@ export const runFuzzySelect = async (config: {
 		lines.push(
 			dim(
 				truncate(
-					`${marks.upDown} move ${marks.bullet} enter select${detailLabel} ${marks.bullet} ${backLabel}${packageLabel}${resultRange}`,
+					`${marks.upDown} move ${marks.bullet} enter select${detailLabel} ${marks.bullet} ${backLabel}${tabLabel}${resultRange}`,
 					width
 				)
 			)
@@ -149,7 +153,7 @@ export const runFuzzySelect = async (config: {
 				return config.canGoBack === true ? { kind: 'back' } : { kind: 'cancelled' }
 			}
 
-			if (key.name === 'tab' && config.canOpenPackages === true) return { kind: 'tab' }
+			if (shouldTriggerTabAction(key.name, config.tabActionLabel)) return { kind: 'tab' }
 			if (key.name === 'right' && config.items.some(item => item.alternateLabel !== undefined)) {
 				showsCommands = chooseDetailMode(showsCommands, key.name)
 				render()

@@ -6,11 +6,12 @@ import {
 	readRunValue
 } from './buildMenuRows.js'
 import { runFuzzySelect } from './fuzzySelect.js'
+import type { FuzzySelectOutcomeT } from './fuzzySelect.js'
 import { describeRunCommand, runScript } from './runScript.js'
 import { listRecentScripts, recordScriptChoice } from './history.js'
 import { loadScriptDescriptions } from './configuration.js'
 import { readPackageJsonInDirectory } from './readPackage.js'
-import { accent, dim, symbols } from './theme.js'
+import { dim, symbols } from './theme.js'
 import type { CliRendererT } from './renderer.js'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
 
@@ -26,32 +27,38 @@ const buildItems = (rows: MenuRowT[]) => {
 	}))
 }
 
-const describeLocation = (targetPackage: TargetPackageT): string => {
-	return targetPackage.relativePath === '.' ? 'root' : targetPackage.relativePath
-}
-
-const buildLocationHeader = (targetPackage: TargetPackageT): string => {
-	return `${accent('abt')} ${dim(symbols().bullet)} ${describeLocation(targetPackage)}`
-}
-
 const chooseScriptHeader = (): string => `[ abt ${symbols().delta} choose a script ]`
+const choosePackageHeader = (): string => `[ abt ${symbols().delta} choose a package ]`
+
+export const buildScriptHeader = (targetPackage: TargetPackageT): string => {
+	return `${chooseScriptHeader()}  ${dim(targetPackage.name)}`
+}
+
+export const buildPackageHeader = (targetPackage: TargetPackageT): string => {
+	return `${choosePackageHeader()}  ${dim(targetPackage.name)}`
+}
 
 export type FlowOutcomeT = {
 	exitCode: number
 	wasCancelled: boolean
 }
 
+export const shouldReturnFromPackagePicker = (outcomeKind: FuzzySelectOutcomeT['kind']): boolean => {
+	return outcomeKind === 'back' || outcomeKind === 'tab'
+}
+
 export const runInteractiveFlow = async (
 	context: ContextT,
 	forwardedArguments: string[],
 	renderer: CliRendererT,
-	header = chooseScriptHeader()
+	header?: string
 ): Promise<FlowOutcomeT> => {
 	const hasOtherPackages = context.isWorkspace && listBrowsablePackages(context).length > 1
 	let targetPackage = context.currentPackage
 	let screen: 'scripts' | 'packages' = 'scripts'
 	let scriptsCanGoBack = false
-	let scriptHeader = header
+	const initialScriptHeader = header ?? buildScriptHeader(context.currentPackage)
+	let scriptHeader = initialScriptHeader
 	const descriptionsByDirectory = new Map<string, Record<string, string>>()
 	const withDescriptions = (candidatePackage: TargetPackageT): TargetPackageT => {
 		let descriptions = descriptionsByDirectory.get(candidatePackage.directory)
@@ -69,15 +76,16 @@ export const runInteractiveFlow = async (
 	for (;;) {
 		if (screen === 'packages') {
 			const packageOutcome = await runFuzzySelect({
-				title: `${accent('abt')} ${dim(symbols().bullet)} packages`,
+				title: buildPackageHeader(context.currentPackage),
 				items: buildItems(buildPackageMenuRows(context)),
-				canGoBack: true
+				canGoBack: true,
+				tabActionLabel: 'scripts'
 			})
 
 			if (packageOutcome.kind === 'cancelled') return { exitCode: 0, wasCancelled: true }
-			if (packageOutcome.kind === 'back') {
+			if (shouldReturnFromPackagePicker(packageOutcome.kind)) {
 				targetPackage = context.currentPackage
-				scriptHeader = header
+				scriptHeader = initialScriptHeader
 				scriptsCanGoBack = false
 				screen = 'scripts'
 				continue
@@ -88,7 +96,7 @@ export const runInteractiveFlow = async (
 			const selectedPackage = context.workspace.packages.find(candidate => candidate.relativePath === selectedPath)
 			if (selectedPackage === undefined) continue
 			targetPackage = selectedPackage
-			scriptHeader = buildLocationHeader(selectedPackage)
+			scriptHeader = buildScriptHeader(selectedPackage)
 			scriptsCanGoBack = true
 			screen = 'scripts'
 			continue
@@ -99,7 +107,7 @@ export const runInteractiveFlow = async (
 			title: scriptHeader,
 			items: buildItems(buildScriptMenuRows(describedPackage, listRecentScripts(targetPackage))),
 			canGoBack: scriptsCanGoBack,
-			canOpenPackages: hasOtherPackages
+			tabActionLabel: hasOtherPackages ? 'packages' : undefined
 		})
 
 		if (scriptOutcome.kind === 'cancelled') return { exitCode: 0, wasCancelled: true }
@@ -134,5 +142,5 @@ export const runPackageScriptFlow = async (
 		isWorkspace: false
 	}
 
-	return await runInteractiveFlow(scopedContext, forwardedArguments, renderer, buildLocationHeader(targetPackage))
+	return await runInteractiveFlow(scopedContext, forwardedArguments, renderer, buildScriptHeader(targetPackage))
 }
