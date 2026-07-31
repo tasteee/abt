@@ -7,6 +7,9 @@ import {
 } from './buildMenuRows.js'
 import { runFuzzySelect } from './fuzzySelect.js'
 import { describeRunCommand, runScript } from './runScript.js'
+import { listRecentScripts, recordScriptChoice } from './history.js'
+import { loadScriptDescriptions } from './configuration.js'
+import { readPackageJsonInDirectory } from './readPackage.js'
 import { accent, dim, symbols } from './theme.js'
 import type { CliRendererT } from './renderer.js'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
@@ -16,7 +19,9 @@ const ANSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
 const buildItems = (rows: MenuRowT[]) => {
 	return rows.map(row => ({
 		label: row.label,
-		searchText: row.label.replace(ANSI_PATTERN, ''),
+		...(row.alternateLabel === undefined ? {} : { alternateLabel: row.alternateLabel }),
+		searchText:
+			row.searchText ?? `${row.label} ${row.alternateLabel ?? ''}`.replace(ANSI_PATTERN, ''),
 		value: row.value
 	}))
 }
@@ -47,6 +52,19 @@ export const runInteractiveFlow = async (
 	let screen: 'scripts' | 'packages' = 'scripts'
 	let scriptsCanGoBack = false
 	let scriptHeader = header
+	const descriptionsByDirectory = new Map<string, Record<string, string>>()
+	const withDescriptions = (candidatePackage: TargetPackageT): TargetPackageT => {
+		let descriptions = descriptionsByDirectory.get(candidatePackage.directory)
+		if (descriptions === undefined) {
+			const packageJson = readPackageJsonInDirectory(candidatePackage.directory)
+			descriptions =
+				packageJson === undefined
+					? {}
+					: loadScriptDescriptions(candidatePackage.directory, packageJson, candidatePackage.scriptsByName)
+			descriptionsByDirectory.set(candidatePackage.directory, descriptions)
+		}
+		return { ...candidatePackage, scriptDescriptionsByName: descriptions }
+	}
 
 	for (;;) {
 		if (screen === 'packages') {
@@ -76,9 +94,10 @@ export const runInteractiveFlow = async (
 			continue
 		}
 
+		const describedPackage = withDescriptions(targetPackage)
 		const scriptOutcome = await runFuzzySelect({
 			title: scriptHeader,
-			items: buildItems(buildScriptMenuRows(targetPackage)),
+			items: buildItems(buildScriptMenuRows(describedPackage, listRecentScripts(targetPackage))),
 			canGoBack: scriptsCanGoBack,
 			canOpenPackages: hasOtherPackages
 		})
@@ -92,6 +111,7 @@ export const runInteractiveFlow = async (
 
 		const scriptName = readRunValue(scriptOutcome.value)
 		if (scriptName === undefined) continue
+		recordScriptChoice(targetPackage, scriptName)
 		renderer.emit({
 			type: 'command:run',
 			description: describeRunCommand(targetPackage, scriptName, context.workspace.rootDirectory)

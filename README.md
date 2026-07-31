@@ -48,6 +48,62 @@ abt test -- --watch    # forward arguments to the script
 abt --list             # every script, one per line, pipeable
 ```
 
+### Script descriptions
+
+Descriptions can live in an `abt` property in `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run"
+  },
+  "abt": {
+    "scripts": {
+      "dev": "Start the local development server",
+      "test": "Run the complete test suite"
+    }
+  }
+}
+```
+
+They can also live in one `abt.json` anywhere inside that package boundary,
+including beside `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "Start the local development server",
+    "test": "Run the complete test suite"
+  }
+}
+```
+
+File values override matching `package.json#abt.scripts` values. Entries that
+do not name a real package script are ignored. Discovery does not descend into
+nested packages, common generated directories, version-control data, or dependencies. More
+than one applicable `abt.json` is reported as ambiguous instead of being
+resolved by an invisible precedence rule.
+
+The default menu is intentionally mixed: configured scripts show their
+description and unconfigured scripts show their command. Press Right Arrow to
+show every command, then Left Arrow to return to descriptions. Filtering always
+matches the script name, description, and command regardless of the visible
+view.
+
+### Recent scripts
+
+ABT remembers chosen scripts separately for each absolute `package.json` and
+moves the most recently used valid scripts to the top of that package's menu.
+Both menu selections and direct commands such as `abt test` update history. The
+history stores only package paths and script names, retains at most 20 scripts
+per package, and never prevents execution if the history location is read-only.
+
+History is stored at `%LOCALAPPDATA%\abt\history.json` on Windows,
+`~/Library/Application Support/abt/history.json` on macOS, and
+`${XDG_STATE_HOME:-~/.local/state}/abt/history.json` elsewhere. Set
+`ABT_HISTORY_PATH` to use a different file.
+
 Workspaces are detected from `pnpm-workspace.yaml` or a `workspaces` field in
 `package.json`. The package manager comes from `packageManager` in
 `package.json`, falling back to whichever lockfile sits at the workspace root.
@@ -161,6 +217,8 @@ dependency updates with dry-run, stable JSON results/errors, and separated
 plain, interactive, JSON, silent, and test renderers.
 Replaced the Pathenger menu dependency with the native fuzzy selector used by
 both scripts and dependencies.
+Added package-scoped script descriptions, command/description view switching,
+and persistent per-package recent-script ordering.
 
 ### 4.0.0
 

@@ -18,6 +18,7 @@ import { createRenderer } from './renderer.js'
 import type { CliRendererT } from './renderer.js'
 import type { ResolutionT } from './resolveTarget.js'
 import type { ContextT } from './types.js'
+import { recordScriptChoice } from './history.js'
 
 // abt's own version, resolved against this file rather than the
 // package.json abt happens to be running inside.
@@ -69,6 +70,7 @@ const runResolvedScript = async (
 	forwardedArguments: string[],
 	renderer: CliRendererT
 ): Promise<number> => {
+	recordScriptChoice(resolution.targetPackage, resolution.scriptName)
 	const commandDescription = describeRunCommand(
 		resolution.targetPackage,
 		resolution.scriptName,

@@ -14,6 +14,7 @@ import { LiveTerminal } from '../bin/liveTerminal.js'
 const workspace = path.resolve(import.meta.dirname, '..')
 const executable = path.join(workspace, 'bin', 'index.js')
 const ansiPattern = /\u001B\[[0-?]*[ -/]*[@-~]/
+const isolatedHistoryPath = path.join(os.tmpdir(), `abt-cli-history-${process.pid}.json`)
 
 const run = (arguments_, extraEnvironment = {}) => {
 	return spawnSync(process.execPath, [executable, ...arguments_], {
@@ -25,6 +26,7 @@ const run = (arguments_, extraEnvironment = {}) => {
 			CI: '',
 			NO_COLOR: '',
 			FORCE_COLOR: '0',
+			ABT_HISTORY_PATH: isolatedHistoryPath,
 			...extraEnvironment
 		}
 	})
@@ -137,11 +139,13 @@ test('direct script execution preserves clean child output and exit status', () 
 		cwd: fixture,
 		encoding: 'utf8',
 		timeout: 5000,
-		env: { ...process.env, NO_COLOR: '1' }
+		env: { ...process.env, NO_COLOR: '1', ABT_HISTORY_PATH: isolatedHistoryPath }
 	})
 	assert.equal(result.status, 0)
 	assert.match(result.stdout, /123/)
 	assert.equal(ansiPattern.test(result.stdout + result.stderr), false)
+	const history = JSON.parse(fs.readFileSync(isolatedHistoryPath, 'utf8'))
+	assert.ok(Object.values(history.packages).some(scriptNames => scriptNames.includes('say')))
 })
 
 test('explicit interactive mode fails instead of attempting raw input through a pipe', () => {

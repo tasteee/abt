@@ -5,6 +5,6 @@ export declare const buildRunValue: (scriptName: string) => string;
 export declare const buildOpenValue: (packageRelativePath: string) => string;
 export declare const readRunValue: (value: string) => string | undefined;
 export declare const readOpenValue: (value: string) => string | undefined;
-export declare const buildScriptMenuRows: (targetPackage: TargetPackageT) => MenuRowT[];
+export declare const buildScriptMenuRows: (targetPackage: TargetPackageT, recentScripts?: string[]) => MenuRowT[];
 export declare const listBrowsablePackages: (context: ContextT) => TargetPackageT[];
 export declare const buildPackageMenuRows: (context: ContextT) => MenuRowT[];

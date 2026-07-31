@@ -109,12 +109,14 @@ const buildTargetPackage = (directory: string, rootDirectory: string, isRoot: bo
 	const relativePath = path.relative(rootDirectory, directory).split('\\').join('/')
 	const fallbackName = relativePath || path.basename(directory)
 
+	const scriptsByName = packageJson.scripts ?? {}
 	return {
 		name: packageJson.name ?? fallbackName,
 		directory,
 		relativePath: relativePath || '.',
 		isRoot,
-		scriptsByName: packageJson.scripts ?? {}
+		scriptsByName,
+		scriptDescriptionsByName: {}
 	}
 }
 

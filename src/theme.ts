@@ -27,6 +27,8 @@ export const symbols = () => ({
 	delta: usesUnicode ? '∆' : 'deps',
 	cursor: usesUnicode ? '❯' : '>',
 	arrow: usesUnicode ? '→' : '->',
+	left: usesUnicode ? '←' : '<',
+	right: usesUnicode ? '→' : '>',
 	leftRight: usesUnicode ? '←→' : '<->',
 	upDown: usesUnicode ? '↑↓' : 'up/down',
 	bullet: usesUnicode ? '·' : '-',
@@ -47,9 +49,11 @@ export const getTerminalRows = (): number => {
 	return Math.max(1, liveRows ?? terminalRows ?? 24)
 }
 
+export const sanitizeTerminalText = (value: string): string => value.replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+
 // Collapse whitespace so a multi-line script reads as one row.
 export const flattenCommand = (command: string): string => {
-	return command.split(/\s+/).join(' ').trim()
+	return sanitizeTerminalText(command).split(/\s+/).join(' ').trim()
 }
 
 export const truncate = (text: string, maximumLength: number): string => {

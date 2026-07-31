@@ -9,6 +9,7 @@ export type PackageJsonT = {
 	dependencies?: Record<string, string>
 	peerDependencies?: Record<string, string>
 	devDependencies?: Record<string, string>
+	abt?: unknown
 }
 
 // A package.json that exists but does not parse is a real problem

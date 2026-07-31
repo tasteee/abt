@@ -5,6 +5,7 @@ export type TargetPackageT = {
     relativePath: string;
     isRoot: boolean;
     scriptsByName: ScriptsByNameT;
+    scriptDescriptionsByName: Record<string, string>;
 };
 export type WorkspaceT = {
     rootDirectory: string;
@@ -17,6 +18,8 @@ export type ContextT = {
 };
 export type MenuRowT = {
     label: string;
+    alternateLabel?: string;
+    searchText?: string;
     value: string;
 };
 export type ParsedArgumentsT = {

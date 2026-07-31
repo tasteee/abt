@@ -6,6 +6,7 @@ import { accent, dim, getTerminalRows, getTerminalWidth, symbols, truncate } fro
 
 export type FuzzySelectItemT = {
 	label: string
+	alternateLabel?: string
 	searchText: string
 	value: string
 }
@@ -56,6 +57,12 @@ export const isPrintableFuzzyInput = (input: string | undefined, key: readline.K
 
 const removeLastCharacter = (value: string): string => [...value].slice(0, -1).join('')
 
+export const chooseDetailMode = (showsCommands: boolean, keyName: string | undefined): boolean => {
+	if (keyName === 'right') return true
+	if (keyName === 'left') return false
+	return showsCommands
+}
+
 const buildVisibleItems = <T>(items: T[], selectedIndex: number, pageSize: number): T[] => {
 	let startIndex = Math.max(0, selectedIndex - Math.floor(pageSize / 2))
 	startIndex = Math.min(startIndex, Math.max(0, items.length - pageSize))
@@ -74,6 +81,7 @@ export const runFuzzySelect = async (config: {
 
 	let query = ''
 	let selectedIndex = 0
+	let showsCommands = false
 	const handleResize = (): void => render()
 	const handleSignal = (): void => keypressQueue.cancel()
 
@@ -95,7 +103,8 @@ export const runFuzzySelect = async (config: {
 			visibleItems.forEach((item, visibleIndex) => {
 				const itemIndex = firstVisibleIndex + visibleIndex
 				const cursor = itemIndex === selectedIndex ? accent(marks.cursor) : ' '
-				const label = itemIndex === selectedIndex ? item.label : dim(item.label)
+				const displayedLabel = showsCommands ? (item.alternateLabel ?? item.label) : item.label
+				const label = itemIndex === selectedIndex ? displayedLabel : dim(displayedLabel)
 				lines.push(truncate(`${cursor} ${label}`, width))
 			})
 		}
@@ -106,7 +115,18 @@ export const runFuzzySelect = async (config: {
 				: ''
 		const backLabel = query.length > 0 ? 'esc clear' : config.canGoBack === true ? 'esc back' : 'esc cancel'
 		const packageLabel = config.canOpenPackages === true ? ` ${marks.bullet} tab packages` : ''
-		lines.push(dim(truncate(`${marks.upDown} move ${marks.bullet} enter select ${marks.bullet} ${backLabel}${packageLabel}${resultRange}`, width)))
+		const canSwitchDetails = config.items.some(item => item.alternateLabel !== undefined && item.alternateLabel !== item.label)
+		const detailLabel = canSwitchDetails
+			? ` ${marks.bullet} ${showsCommands ? `${marks.left} descriptions` : `${marks.right} commands`}`
+			: ''
+		lines.push(
+			dim(
+				truncate(
+					`${marks.upDown} move ${marks.bullet} enter select${detailLabel} ${marks.bullet} ${backLabel}${packageLabel}${resultRange}`,
+					width
+				)
+			)
+		)
 		terminal.render(lines)
 	}
 
@@ -130,6 +150,16 @@ export const runFuzzySelect = async (config: {
 			}
 
 			if (key.name === 'tab' && config.canOpenPackages === true) return { kind: 'tab' }
+			if (key.name === 'right' && config.items.some(item => item.alternateLabel !== undefined)) {
+				showsCommands = chooseDetailMode(showsCommands, key.name)
+				render()
+				continue
+			}
+			if (key.name === 'left' && config.items.some(item => item.alternateLabel !== undefined)) {
+				showsCommands = chooseDetailMode(showsCommands, key.name)
+				render()
+				continue
+			}
 
 			const matches = listMatches()
 			if (key.name === 'up') {

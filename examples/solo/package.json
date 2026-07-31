@@ -12,5 +12,12 @@
 		"lint": "echo [solo] no lint errors",
 		"clean": "echo [solo] removed dist/",
 		"fail": "echo [solo] this one exits 3 && exit 3"
+	},
+	"abt": {
+		"scripts": {
+			"dev": "Start the local development server",
+			"build": "Create the production build",
+			"test": "Run the complete test suite"
+		}
 	}
 }

@@ -11,6 +11,8 @@ export declare const symbols: () => {
     delta: string;
     cursor: string;
     arrow: string;
+    left: string;
+    right: string;
     leftRight: string;
     upDown: string;
     bullet: string;
@@ -20,5 +22,6 @@ export declare const symbols: () => {
 };
 export declare const getTerminalWidth: () => number;
 export declare const getTerminalRows: () => number;
+export declare const sanitizeTerminalText: (value: string) => string;
 export declare const flattenCommand: (command: string) => string;
 export declare const truncate: (text: string, maximumLength: number) => string;

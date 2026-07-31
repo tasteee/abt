@@ -22,12 +22,14 @@ const buildUnlistedPackage = (packageDirectory: string, rootDirectory: string): 
 	const relativePath = toPosixPath(path.relative(rootDirectory, packageDirectory))
 	const fallbackName = path.basename(packageDirectory)
 
+	const scriptsByName = packageJson?.scripts ?? {}
 	return {
 		name: packageJson?.name ?? fallbackName,
 		directory: packageDirectory,
 		relativePath: relativePath || '.',
 		isRoot: false,
-		scriptsByName: packageJson?.scripts ?? {}
+		scriptsByName,
+		scriptDescriptionsByName: {}
 	}
 }
 

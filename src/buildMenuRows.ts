@@ -1,5 +1,5 @@
 import { buildShortName } from './packageNames.js'
-import { dim, flattenCommand, getTerminalWidth, symbols, truncate } from './theme.js'
+import { dim, flattenCommand, symbols } from './theme.js'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
 
 // Menu values are self-describing so the flow can branch on a
@@ -28,11 +28,11 @@ export const readOpenValue = (value: string): string | undefined => {
 }
 
 const COLUMN_GAP = 3
-const CURSOR_GUTTER = 2
-
 type RawRowT = {
 	name: string
 	detail: string
+	alternateDetail?: string
+	searchText?: string
 	value: string
 }
 
@@ -43,33 +43,54 @@ const alignRows = (rawRows: RawRowT[]): MenuRowT[] => {
 	const longestNameLength = Math.max(...nameLengths, 0)
 	const nameColumnWidth = longestNameLength + COLUMN_GAP
 
-	const terminalWidth = getTerminalWidth()
-	const detailWidth = terminalWidth - nameColumnWidth - CURSOR_GUTTER - 1
-
 	return rawRows.map(rawRow => {
 		const padding = ' '.repeat(nameColumnWidth - rawRow.name.length)
-		const hasNoDetail = rawRow.detail.length === 0
-		if (hasNoDetail) return { label: rawRow.name, value: rawRow.value }
-
-		const fittedDetail = truncate(rawRow.detail, Math.max(detailWidth, 0))
-		const label = `${rawRow.name}${padding}${dim(fittedDetail)}`
-		return { label, value: rawRow.value }
+		const buildLabel = (detail: string): string => {
+			if (detail.length === 0) return rawRow.name
+			return `${rawRow.name}${padding}${dim(detail)}`
+		}
+		return {
+			label: buildLabel(rawRow.detail),
+			...(rawRow.alternateDetail === undefined ? {} : { alternateLabel: buildLabel(rawRow.alternateDetail) }),
+			...(rawRow.searchText === undefined ? {} : { searchText: rawRow.searchText }),
+			value: rawRow.value
+		}
 	})
 }
 
-const buildScriptRows = (targetPackage: TargetPackageT): RawRowT[] => {
-	const scriptNames = Object.keys(targetPackage.scriptsByName)
+const buildScriptRows = (targetPackage: TargetPackageT, recentScripts: string[]): RawRowT[] => {
+	const declaredScriptNames = Object.keys(targetPackage.scriptsByName)
+	const recentOrder = new Map(recentScripts.map((scriptName, index) => [scriptName, index]))
+	const declaredOrder = new Map(declaredScriptNames.map((scriptName, index) => [scriptName, index]))
+	const scriptNames = [...declaredScriptNames].sort((left, right) => {
+		const leftRecent = recentOrder.get(left)
+		const rightRecent = recentOrder.get(right)
+		if (leftRecent !== undefined && rightRecent !== undefined) return leftRecent - rightRecent
+		if (leftRecent !== undefined) return -1
+		if (rightRecent !== undefined) return 1
+		return (declaredOrder.get(left) ?? 0) - (declaredOrder.get(right) ?? 0)
+	})
 
 	return scriptNames.map(scriptName => {
-		const command = targetPackage.scriptsByName[scriptName]
-		return { name: scriptName, detail: flattenCommand(command), value: buildRunValue(scriptName) }
+		const command = flattenCommand(targetPackage.scriptsByName[scriptName])
+		const description = targetPackage.scriptDescriptionsByName?.[scriptName]
+		const recentSuffix = recentOrder.has(scriptName) ? ` ${symbols().bullet} recent` : ''
+		const primaryDetail = `${description === undefined ? command : flattenCommand(description)}${recentSuffix}`
+		const commandDetail = `${command}${recentSuffix}`
+		return {
+			name: scriptName,
+			detail: primaryDetail,
+			...(description === undefined ? {} : { alternateDetail: commandDetail }),
+			searchText: `${scriptName} ${command} ${description ?? ''}`,
+			value: buildRunValue(scriptName)
+		}
 	})
 }
 
 // The default menu is scripts and nothing else. Packages live one
 // keypress away rather than at the bottom of every list.
-export const buildScriptMenuRows = (targetPackage: TargetPackageT): MenuRowT[] => {
-	return alignRows(buildScriptRows(targetPackage))
+export const buildScriptMenuRows = (targetPackage: TargetPackageT, recentScripts: string[] = []): MenuRowT[] => {
+	return alignRows(buildScriptRows(targetPackage, recentScripts))
 }
 
 const describeScriptCount = (targetPackage: TargetPackageT): string => {
