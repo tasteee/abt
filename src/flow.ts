@@ -1,4 +1,3 @@
-import { Pathenger } from 'pathenger'
 import {
 	buildPackageMenuRows,
 	buildScriptMenuRows,
@@ -6,33 +5,23 @@ import {
 	readOpenValue,
 	readRunValue
 } from './buildMenuRows.js'
+import { runFuzzySelect } from './fuzzySelect.js'
 import { describeRunCommand, runScript } from './runScript.js'
 import { accent, dim } from './theme.js'
-import type { KeyBindingsT } from 'pathenger'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
 
-type StoreT = {
-	openedPackagePath: string
-	selectedScriptName: string
-	exitCode: number
-}
+const ANSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
 
-type ResultsT = {
-	pickScript?: string
-	browsePackages?: string
-	pickPackageScript?: string
-}
-
-const buildOptions = (rows: MenuRowT[]) => {
-	return rows.map(row => {
-		return { label: row.label, value: row.value }
-	})
+const buildItems = (rows: MenuRowT[]) => {
+	return rows.map(row => ({
+		label: row.label,
+		searchText: row.label.replace(ANSI_PATTERN, ''),
+		value: row.value
+	}))
 }
 
 const describeLocation = (targetPackage: TargetPackageT): string => {
-	const isRootPackage = targetPackage.relativePath === '.'
-	if (isRootPackage) return 'root'
-	return targetPackage.relativePath
+	return targetPackage.relativePath === '.' ? 'root' : targetPackage.relativePath
 }
 
 const buildLocationHeader = (targetPackage: TargetPackageT): string => {
@@ -46,122 +35,67 @@ export type FlowOutcomeT = {
 	wasCancelled: boolean
 }
 
-// The default menu is the scripts of the package you are standing
-// in — nothing else. Tab opens the package list, selecting one
-// shows its scripts, and escape walks back up either step.
 export const runInteractiveFlow = async (
 	context: ContextT,
 	forwardedArguments: string[],
 	header = CHOOSE_SCRIPT_HEADER
 ): Promise<FlowOutcomeT> => {
-	const flow = Pathenger.create<StoreT, ResultsT>({
-		store: { openedPackagePath: '', selectedScriptName: '', exitCode: 0 }
-	})
+	const hasOtherPackages = context.isWorkspace && listBrowsablePackages(context).length > 1
+	let targetPackage = context.currentPackage
+	let screen: 'scripts' | 'packages' = 'scripts'
+	let scriptsCanGoBack = false
+	let scriptHeader = header
 
-	const findOpenedPackage = (): TargetPackageT => {
-		const openedPackage = context.workspace.packages.find(candidatePackage => {
-			return candidatePackage.relativePath === flow.store.openedPackagePath
-		})
-
-		if (openedPackage === undefined) return context.currentPackage
-		return openedPackage
-	}
-
-	const findTargetPackage = (): TargetPackageT => {
-		const hasOpenedPackage = flow.store.openedPackagePath.length > 0
-		if (hasOpenedPackage) return findOpenedPackage()
-		return context.currentPackage
-	}
-
-	const rememberSelectedScript = (selectedValue: string): void => {
-		const scriptName = readRunValue(selectedValue)
-		if (scriptName === undefined) return
-		flow.store.selectedScriptName = scriptName
-	}
-
-	const RunSelectedScript = Pathenger.createOutputStep({
-		id: 'runSelectedScript',
-		next: () => flow.exit(),
-
-		message: () => {
-			const targetPackage = findTargetPackage()
-			const scriptName = flow.store.selectedScriptName
-			return dim(describeRunCommand(targetPackage, scriptName, context.workspace.rootDirectory))
-		},
-
-		// The script owns the terminal outright while it runs.
-		task: async () => {
-			const targetPackage = findTargetPackage()
-			const scriptName = flow.store.selectedScriptName
-
-			const outcome = await flow.suspend(() => {
-				return runScript(targetPackage, scriptName, context.workspace.rootDirectory, forwardedArguments)
+	for (;;) {
+		if (screen === 'packages') {
+			const packageOutcome = await runFuzzySelect({
+				title: `${accent('abt')} ${dim('·')} packages`,
+				items: buildItems(buildPackageMenuRows(context)),
+				canGoBack: true
 			})
 
-			flow.store.exitCode = outcome.exitCode
-			return outcome
+			if (packageOutcome.kind === 'cancelled') return { exitCode: 0, wasCancelled: true }
+			if (packageOutcome.kind === 'back') {
+				targetPackage = context.currentPackage
+				scriptHeader = header
+				scriptsCanGoBack = false
+				screen = 'scripts'
+				continue
+			}
+			if (packageOutcome.kind !== 'selected') continue
+
+			const selectedPath = readOpenValue(packageOutcome.value)
+			const selectedPackage = context.workspace.packages.find(candidate => candidate.relativePath === selectedPath)
+			if (selectedPackage === undefined) continue
+			targetPackage = selectedPackage
+			scriptHeader = buildLocationHeader(selectedPackage)
+			scriptsCanGoBack = true
+			screen = 'scripts'
+			continue
 		}
-	})
 
-	const PickPackageScript = Pathenger.createSelectInputStep({
-		id: 'pickPackageScript',
-		canGoBack: true,
-		tip: 'escape to go back',
-		options: () => buildOptions(buildScriptMenuRows(findOpenedPackage())),
-		next: () => RunSelectedScript,
-		post: rememberSelectedScript,
+		const scriptOutcome = await runFuzzySelect({
+			title: scriptHeader,
+			items: buildItems(buildScriptMenuRows(targetPackage)),
+			canGoBack: scriptsCanGoBack,
+			canOpenPackages: hasOtherPackages
+		})
 
-		message: () => {
-			const openedPackage = findOpenedPackage()
-			return `${accent('abt')} ${dim('·')} ${describeLocation(openedPackage)}`
+		if (scriptOutcome.kind === 'cancelled') return { exitCode: 0, wasCancelled: true }
+		if (scriptOutcome.kind === 'back' || scriptOutcome.kind === 'tab') {
+			screen = 'packages'
+			continue
 		}
-	})
+		if (scriptOutcome.kind !== 'selected') continue
 
-	const BrowsePackages = Pathenger.createSelectInputStep({
-		id: 'browsePackages',
-		canGoBack: true,
-		tip: 'escape to go back',
-		message: `${accent('abt')} ${dim('·')} packages`,
-		options: () => buildOptions(buildPackageMenuRows(context)),
-		next: () => PickPackageScript,
-
-		post: selectedValue => {
-			const openedPackagePath = readOpenValue(selectedValue)
-			if (openedPackagePath === undefined) return
-			flow.store.openedPackagePath = openedPackagePath
-		}
-	})
-
-	// Only offer the tab route when there is somewhere to go.
-	const hasOtherPackages = context.isWorkspace && listBrowsablePackages(context).length > 1
-	const packageKeyBindings: KeyBindingsT = hasOtherPackages ? { tab: BrowsePackages } : {}
-	const packageTip = hasOtherPackages ? 'tab to browse packages' : undefined
-
-	const PickScript = Pathenger.createSelectInputStep({
-		id: 'pickScript',
-		message: header,
-		tip: packageTip,
-		options: () => buildOptions(buildScriptMenuRows(context.currentPackage)),
-		keys: packageKeyBindings,
-		next: () => RunSelectedScript,
-		post: rememberSelectedScript
-	})
-
-	let wasCancelled = false
-
-	await flow.start({
-		firstStep: PickScript,
-		steps: [PickScript, BrowsePackages, PickPackageScript, RunSelectedScript],
-		onCancel: () => {
-			wasCancelled = true
-		}
-	})
-
-	return { exitCode: flow.store.exitCode, wasCancelled }
+		const scriptName = readRunValue(scriptOutcome.value)
+		if (scriptName === undefined) continue
+		process.stderr.write(`${dim(`› ${describeRunCommand(targetPackage, scriptName, context.workspace.rootDirectory)}`)}\n\n`)
+		const outcome = await runScript(targetPackage, scriptName, context.workspace.rootDirectory, forwardedArguments)
+		return { exitCode: outcome.exitCode, wasCancelled: false }
+	}
 }
 
-// Skipping the first menu when the developer already named the
-// package, but still letting them pick the script.
 export const runPackageScriptFlow = async (
 	context: ContextT,
 	targetPackage: TargetPackageT,

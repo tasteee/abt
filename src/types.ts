@@ -47,6 +47,8 @@ export type DependencyEntryT = {
 	section: DependencySectionT
 	declaredVersion: string
 	installedVersion?: string
+	majorVersion?: string
+	majorError?: string
 	latestVersion?: string
 	latestError?: string
 }

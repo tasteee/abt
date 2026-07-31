@@ -28,18 +28,21 @@ export const printHelp = (version: string): void => {
 		`  -h, --help             ${dim('show this help')}`,
 		'',
 		bold('In the script menu'),
+		`  type                   ${dim('fuzzy-filter scripts')}`,
+		`  backspace              ${dim('edit the filter')}`,
 		`  ↑ ↓                    ${dim('move')}`,
 		`  enter                  ${dim('select')}`,
 		`  tab                    ${dim('browse workspace packages')}`,
-		`  escape                 ${dim('back')}`,
+		`  escape                 ${dim('clear the filter, then go back')}`,
 		`  ctrl+c                 ${dim('quit')}`,
 		'',
 		bold('In the dependency list'),
+		`  type                   ${dim('fuzzy-filter dependencies')}`,
+		`  backspace              ${dim('edit the filter')}`,
 		`  ↑ ↓                    ${dim('move')}`,
-		`  1                      ${dim('stage the installed version')}`,
-		`  2                      ${dim('stage the exact latest version')}`,
-		`  enter                  ${dim('apply staged changes')}`,
-		`  escape                 ${dim('discard changes and quit')}`
+		`  ← →                    ${dim('choose a version')}`,
+		`  enter                  ${dim('review staged changes')}`,
+		`  escape                 ${dim('clear the filter, then cancel')}`
 	]
 
 	for (const line of lines) writeLine(line)

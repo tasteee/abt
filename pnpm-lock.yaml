@@ -11,9 +11,6 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
-      pathenger:
-        specifier: ^1.1.0
-        version: 1.1.0
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
@@ -90,9 +87,6 @@ packages:
   path-key@4.0.0:
     resolution: {integrity: sha512-haREypq7xkM7ErfgIyA0z+Bj4AGKlMSdlQE2jvJo6huWD1EdkKYV+G/T4nq0YEF2vgTT8kqMFKo1uHn950r4SQ==}
     engines: {node: '>=12'}
-
-  pathenger@1.1.0:
-    resolution: {integrity: sha512-7WapA+lMYtqLmmjNg4zDHN7jneueIBb9TbmLWukcsSS5jgDQr3j3zGPxOozx/XY1dBmF96bFdQchdQ2z+4w6Sw==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -203,10 +197,6 @@ snapshots:
   path-key@3.1.1: {}
 
   path-key@4.0.0: {}
-
-  pathenger@1.1.0:
-    dependencies:
-      picocolors: 1.1.1
 
   picocolors@1.1.1: {}
 

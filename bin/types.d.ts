@@ -26,9 +26,9 @@ export type ParsedArgumentsT = {
     positionals: string[];
 };
 export declare const DependencySection: {
-    readonly dependencies: "dependencies";
-    readonly peerDependencies: "peerDependencies";
-    readonly devDependencies: "devDependencies";
+    readonly dependencies: 'dependencies';
+    readonly peerDependencies: 'peerDependencies';
+    readonly devDependencies: 'devDependencies';
 };
 export type DependencySectionT = (typeof DependencySection)[keyof typeof DependencySection];
 export type DependencyEntryT = {
@@ -36,6 +36,8 @@ export type DependencyEntryT = {
     section: DependencySectionT;
     declaredVersion: string;
     installedVersion?: string;
+    majorVersion?: string;
+    majorError?: string;
     latestVersion?: string;
     latestError?: string;
 };

@@ -5,6 +5,7 @@ import picocolors from 'picocolors'
 export const accent = picocolors.cyan
 export const dim = picocolors.dim
 export const bold = picocolors.bold
+export const highlight = picocolors.inverse
 
 export const drillSymbol = '›'
 export const ellipsis = '…'

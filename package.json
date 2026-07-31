@@ -32,7 +32,6 @@
 	},
 	"dependencies": {
 		"execa": "10.0.1",
-		"pathenger": "^1.1.0",
 		"picocolors": "^1.1.1"
 	}
 }

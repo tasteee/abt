@@ -33,12 +33,13 @@ export const printDependencyReport = (entries: DependencyEntryT[]): void => {
 		if (sectionEntries.length === 0) continue
 
 		process.stdout.write(`${FRIENDLY_SECTION_NAME[section]}\n`)
-		process.stdout.write('package\tdeclared\tinstalled\tlatest\n')
+		process.stdout.write('package\tdeclared\tinstalled\tmajor\tlatest\n')
 
 		for (const entry of sectionEntries) {
 			const installed = printableVersion(entry.installedVersion, 'not installed')
+			const major = printableVersion(entry.majorVersion, 'unavailable')
 			const latest = printableVersion(entry.latestVersion, 'unavailable')
-			process.stdout.write(`${entry.name}\t${entry.declaredVersion}\t${installed}\t${latest}\n`)
+			process.stdout.write(`${entry.name}\t${entry.declaredVersion}\t${installed}\t${major}\t${latest}\n`)
 		}
 	}
 }

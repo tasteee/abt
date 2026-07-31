@@ -14,6 +14,8 @@ abt
 ```
 
 `abt` shows the scripts of the package you are standing in. Pick one and it runs.
+Start typing to fuzzy-filter by script name or command. Backspace edits the
+query; Escape clears it before leaving the menu.
 
 ```
 ? abt · apps/web
@@ -61,27 +63,34 @@ abt deps web           # dependencies of a workspace package
 ```
 
 `abt deps` presents `dependencies`, `peerDependencies`, and `devDependencies`
-as a focused `package.json` fragment, with installed and latest versions in an
-action rail beside each declaration:
+as a responsive JSON-table hybrid. The colon remains the hinge between the
+manifest declaration and the installed, same-major, and latest registry values:
 
 ```
+                         declared    installed    major       latest
 "dependencies": {
-  "execa": "^9.6.1"  │ [1] pin installed 9.6.1 - [2] pin latest 10.0.1 major
+❯  "execa":             "^9.6.1"    9.6.1        9.8.0       10.0.1
 },
 "devDependencies": {
-  "typescript": "^6.0.3"  │ [1] pin installed 6.0.3 - [2] pin latest 7.0.2 major
+   "typescript":        "^6.0.3"    6.0.3        6.4.2       7.0.2
 }
 ```
 
-The fragment deliberately omits the outermost `{` and `}`. It preserves the
-section and dependency order from the real manifest, while navigation skips
-the structural lines.
+The header and controls stay fixed while dependency rows move through a viewport.
+Up/down changes the focused dependency, whose declared cell is highlighted.
+Left/right moves that cell through the available declared, installed,
+same-major, and latest columns. Every column is a separate stop, even when two
+columns contain the same version.
+Page up/down moves through the dependency list. The proposed value appears in
+the declared column with `←`; pressing `enter` opens a before/after review
+screen, where `enter` applies and `escape` returns to the table.
 
-Move with the arrow keys. Press `1` to stage the exact version that is currently
-installed, or `2` to stage the exact latest registry version. The JSON preview
-updates immediately, but `package.json` is not written until `enter`; `escape`
-discards the staged changes. A major upgrade requires a second `enter` before it
-is applied.
+Typing fuzzy-filters dependency names and focuses the best match. Backspace
+edits the filter; Escape clears an active filter before cancelling the command.
+
+At compact widths the name column contracts. At narrow widths the rows return
+to a compact JSON fragment and the selected dependency's four values appear on
+one detail line.
 
 Applying updates only the selected values in `package.json`; it does not install
 packages or rewrite the lockfile. The final message reminds you to run your
@@ -101,10 +110,11 @@ package's scripts rather than chosen first.
 
 ### Next
 
-Added `abt deps` with a native JSON-fragment editor; declared, installed, and
-latest versions; staged pin/latest actions; major-upgrade confirmation;
-viewport-aware navigation; workspace package targeting; and a plain
-non-interactive report.
+Added `abt deps` with a responsive JSON-table editor; declared, installed,
+same-major, and latest versions; staged column actions; a before/after review
+screen; fuzzy filtering; viewport-aware navigation; workspace package
+targeting; and a plain non-interactive report. Script and package menus now
+support the same type-to-filter interaction.
 
 ### 4.0.0
 

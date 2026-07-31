@@ -9,7 +9,13 @@ import {
 	loadLatestVersions,
 	readInstalledVersion
 } from '../bin/dependencies.js'
-import { buildDependencyScreen, isMajorUpgrade } from '../bin/dependencyFlow.js'
+import {
+	buildDependencyScreen,
+	buildReviewScreen,
+	isMajorUpgrade,
+	listVersionTrackChoices,
+	moveVersionColumn
+} from '../bin/dependencyFlow.js'
 import { updateDependencyVersion, updateDependencyVersions } from '../bin/updateDependency.js'
 
 const makeTemporaryDirectory = () => fs.mkdtempSync(path.join(os.tmpdir(), 'abt-deps-'))
@@ -61,7 +67,7 @@ test('builds dependency entries in manifest order', () => {
 	)
 })
 
-test('renders a package.json fragment without outer braces', () => {
+test('renders a responsive dependency table with staged values in the declared column', () => {
 	const targetPackage = {
 		name: 'fixture',
 		directory: '.',
@@ -75,6 +81,7 @@ test('renders a package.json fragment without outer braces', () => {
 			section: 'dependencies',
 			declaredVersion: '^9.6.1',
 			installedVersion: '9.6.1',
+			majorVersion: '9.8.0',
 			latestVersion: '10.0.1'
 		},
 		{
@@ -82,6 +89,7 @@ test('renders a package.json fragment without outer braces', () => {
 			section: 'devDependencies',
 			declaredVersion: '^6.0.3',
 			installedVersion: '6.0.3',
+			majorVersion: '6.4.2',
 			latestVersion: '7.0.2'
 		}
 	]
@@ -90,9 +98,12 @@ test('renders a package.json fragment without outer braces', () => {
 	const plainScreen = screen.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, '')
 
 	assert.match(plainScreen, /"dependencies": \{/)
-	assert.match(plainScreen, /"execa": "\^9\.6\.1"/)
-	assert.match(plainScreen, /\[1\] pin installed 9\.6\.1 - \[2\] pin latest 10\.0\.1 major/)
-	assert.match(plainScreen, /\},\n  "devDependencies": \{/)
+	assert.match(plainScreen, /filter: \(type to filter…\)/)
+	assert.match(plainScreen, /execa:\s+"\^9\.6\.1"\s+9\.6\.1\s+9\.8\.0\s+10\.0\.1/)
+	assert.match(plainScreen, /declared\s+installed\s+major\s+latest/)
+	assert.match(plainScreen, /^\[ abt ∆ dependencies \]  packages\/web\/package\.json/m)
+	assert.doesNotMatch(plainScreen, /i\/m\/l/)
+	assert.match(plainScreen, /\},\n "devDependencies": \{/)
 	assert.doesNotMatch(plainScreen, /\n  \{\n/)
 
 	const stagedScreen = buildDependencyScreen(
@@ -107,8 +118,7 @@ test('renders a package.json fragment without outer braces', () => {
 					name: 'execa',
 					from: '^9.6.1',
 					to: '10.0.1',
-					kind: 'latest',
-					isMajor: true
+					kind: 'latest'
 				}
 			]
 		]),
@@ -117,8 +127,49 @@ test('renders a package.json fragment without outer braces', () => {
 		.join('\n')
 		.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, '')
 
-	assert.match(stagedScreen, /"execa": "10\.0\.1"/)
-	assert.match(stagedScreen, /was \^9\.6\.1 - staged \[2\] pin latest 10\.0\.1 · major/)
+	assert.match(stagedScreen, /execa:\s+"10\.0\.1" ←\s+9\.6\.1\s+9\.8\.0\s+10\.0\.1/)
+	assert.match(stagedScreen, /1 staged/)
+})
+
+test('renders staged dependency changes on a separate review screen', () => {
+	const review = buildReviewScreen(
+		new Map([
+			[0, { entryIndex: 0, name: '@types/node', from: '26.1.2', to: '26.0.1', kind: 'installed' }],
+			[1, { entryIndex: 1, name: 'typescript', from: '7.0.2', to: '6.4.2', kind: 'major' }]
+		])
+	)
+		.join('\n')
+		.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, '')
+
+	assert.match(review, /Review 2 changes/)
+	assert.match(review, /@types\/node\s+26\.1\.2\s+→\s+26\.0\.1/)
+	assert.match(review, /typescript\s+7\.0\.2\s+→\s+6\.4\.2/)
+	assert.match(review, /enter apply · esc go back/)
+})
+
+test('moves across all four version columns even when their values repeat', () => {
+	const entry = {
+		name: '@types/node',
+		section: 'devDependencies',
+		declaredVersion: '26.1.2',
+		installedVersion: '26.0.1',
+		majorVersion: '26.1.2',
+		latestVersion: '26.1.2'
+	}
+
+	assert.deepEqual(
+		listVersionTrackChoices(entry),
+		[
+			{ kind: 'declared', version: '26.1.2' },
+			{ kind: 'installed', version: '26.0.1' },
+			{ kind: 'major', version: '26.1.2' },
+			{ kind: 'latest', version: '26.1.2' }
+		]
+	)
+	assert.equal(moveVersionColumn(entry, 'declared', 1), 'installed')
+	assert.equal(moveVersionColumn(entry, 'installed', 1), 'major')
+	assert.equal(moveVersionColumn(entry, 'major', 1), 'latest')
+	assert.equal(moveVersionColumn(entry, 'latest', -1), 'major')
 })
 
 test('updates only the selected dependency string and preserves formatting', () => {
@@ -184,11 +235,16 @@ test('applies several staged dependency changes in one manifest write', () => {
 	)
 })
 
-test('loads latest versions from a registry endpoint', async () => {
+test('loads latest and installed-major versions from a registry endpoint', async () => {
 	const http = await import('node:http')
 	const server = http.createServer((_request, response) => {
 		response.setHeader('content-type', 'application/json')
-		response.end('{"version":"9.8.7"}')
+		response.end(
+			JSON.stringify({
+				'dist-tags': { latest: '2.0.0' },
+				versions: { '1.0.0': {}, '1.8.7': {}, '1.9.0-beta.1': {}, '2.0.0': {} }
+			})
+		)
 	})
 
 	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -198,10 +254,11 @@ test('loads latest versions from a registry endpoint', async () => {
 
 	try {
 		const entries = await loadLatestVersions(
-			[{ name: '@scope/tool', section: 'dependencies', declaredVersion: '^1.0.0' }],
+			[{ name: '@scope/tool', section: 'dependencies', declaredVersion: '^2.0.0', installedVersion: '1.0.0' }],
 			`http://127.0.0.1:${address.port}`
 		)
-		assert.equal(entries[0].latestVersion, '9.8.7')
+		assert.equal(entries[0].majorVersion, '1.8.7')
+		assert.equal(entries[0].latestVersion, '2.0.0')
 	} finally {
 		server.close()
 	}
