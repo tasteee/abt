@@ -31,6 +31,15 @@ export type ParsedArgumentsT = {
 	wantsVersion: boolean
 	wantsHelp: boolean
 	wantsList: boolean
+	interactiveMode: 'auto' | 'always' | 'never'
+	colorMode: 'auto' | 'always' | 'never'
+	unicodeMode: 'auto' | 'always' | 'never'
+	wantsJson: boolean
+	quiet: boolean
+	verbose: boolean
+	debug: boolean
+	dryRun: boolean
+	updates: string[]
 	positionals: string[]
 }
 

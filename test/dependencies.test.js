@@ -16,7 +16,9 @@ import {
 	listVersionTrackChoices,
 	moveVersionColumn
 } from '../bin/dependencyFlow.js'
+import { resolveDependencyUpdates } from '../bin/dependencyCommand.js'
 import { updateDependencyVersion, updateDependencyVersions } from '../bin/updateDependency.js'
+import { configureTheme } from '../bin/theme.js'
 
 const makeTemporaryDirectory = () => fs.mkdtempSync(path.join(os.tmpdir(), 'abt-deps-'))
 
@@ -170,6 +172,79 @@ test('moves across all four version columns even when their values repeat', () =
 	assert.equal(moveVersionColumn(entry, 'installed', 1), 'major')
 	assert.equal(moveVersionColumn(entry, 'major', 1), 'latest')
 	assert.equal(moveVersionColumn(entry, 'latest', -1), 'major')
+})
+
+test('resolves explicit non-interactive dependency lanes without guessing', () => {
+	const entries = [
+		{
+			name: 'typescript',
+			section: 'devDependencies',
+			declaredVersion: '^6.0.0',
+			installedVersion: '6.0.3',
+			majorVersion: '6.4.2',
+			latestVersion: '7.0.2'
+		}
+	]
+	assert.deepEqual(resolveDependencyUpdates(entries, ['typescript=major']), [
+		{
+			name: 'typescript',
+			section: 'devDependencies',
+			from: '^6.0.0',
+			to: '6.4.2',
+			lane: 'major'
+		}
+	])
+	assert.throws(() => resolveDependencyUpdates(entries, ['typescript=next']), /Expected PACKAGE=installed\|major\|latest/)
+	assert.throws(() => resolveDependencyUpdates(entries, ['missing=latest']), /no dependency named/)
+})
+
+test('keeps every dependency interface line inside a constrained terminal', () => {
+	configureTheme({
+		interactive: true,
+		color: true,
+		unicode: false,
+		json: false,
+		quiet: false,
+		verbose: false,
+		debug: false,
+		columns: 12,
+		rows: 8,
+		ci: false
+	})
+	const target = {
+		name: 'fixture',
+		directory: '.',
+		relativePath: 'packages/a-very-long-name',
+		isRoot: false,
+		scriptsByName: {}
+	}
+	const entries = [
+		{
+			name: '@scope/a-very-long-dependency',
+			section: 'dependencies',
+			declaredVersion: '^123.456.789',
+			installedVersion: '123.456.789',
+			majorVersion: '123.999.999',
+			latestVersion: '999.999.999'
+		}
+	]
+	const ansi = /\u001B\[[0-?]*[ -/]*[@-~]/g
+	const lines = buildDependencyScreen(entries, target, 0, new Map(), '')
+	assert.ok(lines.every(line => line.replace(ansi, '').length <= 12))
+	assert.match(lines.join('\n'), /declared/)
+
+	configureTheme({
+		interactive: false,
+		color: false,
+		unicode: true,
+		json: false,
+		quiet: false,
+		verbose: false,
+		debug: false,
+		columns: 80,
+		rows: 24,
+		ci: false
+	})
 })
 
 test('updates only the selected dependency string and preserves formatting', () => {

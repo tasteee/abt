@@ -1,8 +1,10 @@
 import readline from 'node:readline'
 import { isRegistryDependency } from './dependencies.js'
+import { CancelledError } from './errors.js'
 import { fuzzyFilter } from './fuzzy.js'
+import { LiveTerminal } from './liveTerminal.js'
 import { updateDependencyVersions } from './updateDependency.js'
-import { accent, bold, dim, getTerminalWidth, highlight, truncate } from './theme.js'
+import { accent, bold, dim, getTerminalRows, getTerminalWidth, highlight, symbols, truncate } from './theme.js'
 import type { DependencyEntryT, DependencySectionT, TargetPackageT } from './types.js'
 
 const FRIENDLY_SECTION_NAME: Record<DependencySectionT, string> = {
@@ -30,6 +32,7 @@ type KeypressT = { input: string | undefined; key: readline.Key }
 
 type KeypressQueueT = {
 	read: () => Promise<KeypressT>
+	cancel: () => void
 	dispose: () => void
 }
 
@@ -54,11 +57,11 @@ const describeLocation = (targetPackage: TargetPackageT): string => {
 const padCell = (value: string, width: number): string => truncate(value, width).padEnd(width)
 
 const buildTitle = (targetPackage: TargetPackageT, width: number): string => {
-	const title = '[ abt ∆ dependencies ]'
+	const title = `[ abt ${symbols().delta} dependencies ]`
 	const location = describeLocation(targetPackage)
-	const availableLocationWidth = Math.max(1, width - title.length - 2)
-	const displayedLocation = truncate(location, availableLocationWidth)
-	return `[ ${accent('abt')} ∆ dependencies ]  ${dim(displayedLocation)}`
+	const availableLocationWidth = Math.max(0, width - title.length - 2)
+	const displayedLocation = availableLocationWidth === 0 ? '' : `  ${dim(truncate(location, availableLocationWidth))}`
+	return truncate(`[ ${accent('abt')} ${symbols().delta} dependencies ]${displayedLocation}`, width)
 }
 
 const getTableMode = (width: number): TableModeT => {
@@ -67,7 +70,7 @@ const getTableMode = (width: number): TableModeT => {
 	return 'narrow'
 }
 
-const displayVersion = (version: string | undefined): string => version ?? '—'
+const displayVersion = (version: string | undefined): string => version ?? symbols().missing
 
 export const listFilteredDependencyIndexes = (entries: DependencyEntryT[], query: string): number[] => {
 	return fuzzyFilter(
@@ -102,12 +105,13 @@ const buildDependencyRow = (
 	width: number
 ): string => {
 	const isSelected = entryIndex === selectedIndex
-	const cursor = isSelected ? accent('❯') : ' '
-	const declared = JSON.stringify(stagedChange?.to ?? entry.declaredVersion) + (stagedChange === undefined ? '' : ' ←')
+	const cursor = isSelected ? accent(symbols().cursor) : ' '
+	const declared = JSON.stringify(stagedChange?.to ?? entry.declaredVersion) + (stagedChange === undefined ? '' : ` ${symbols().arrow === '→' ? '←' : '<-'}`)
 
 	if (mode === 'narrow') {
 		const comma = isLastInSection ? '' : ','
-		const name = `${JSON.stringify(entry.name)}: `
+		const maximumNameWidth = Math.max(1, width - 12)
+		const name = `${truncate(JSON.stringify(entry.name), maximumNameWidth)}: `
 		const availableDeclaredWidth = Math.max(1, width - 3 - name.length - comma.length)
 		const displayedDeclared = truncate(declared, availableDeclaredWidth)
 		return `${cursor}  ${name}${focusedColumn === 'declared' ? highlight(displayedDeclared) : displayedDeclared}${comma}`
@@ -161,7 +165,7 @@ const buildViewportRows = (
 
 			openSection = entry.section
 			lines.push(` ${bold(`${JSON.stringify(FRIENDLY_SECTION_NAME[entry.section])}: {`)}`)
-			if (entryIndex > 0 && entries[entryIndex - 1].section === entry.section) lines.push(dim('   …'))
+			if (entryIndex > 0 && entries[entryIndex - 1].section === entry.section) lines.push(dim(`   ${symbols().range === '–' ? '…' : '...'}`))
 		}
 
 		const isLastInSection = entries[entryIndex + 1]?.section !== entry.section
@@ -180,7 +184,7 @@ const buildViewportRows = (
 	}
 
 	if (openSection !== undefined && endIndex < entries.length && entries[endIndex].section === openSection) {
-		lines.push(dim('   …'))
+		lines.push(dim(`   ${symbols().range === '–' ? '…' : '...'}`))
 	}
 	if (openSection !== undefined) lines.push(` ${hasLaterSection(entries, endIndex - 1) ? '},' : '}'}`)
 	return lines
@@ -234,6 +238,15 @@ const buildNarrowDetail = (
 	focusedColumn: VersionColumnT,
 	width: number
 ): string => {
+	if (width < 52) {
+		const active = [
+			{ label: 'declared', column: 'declared' as const, version: stagedChange?.to ?? entry.declaredVersion },
+			{ label: 'installed', column: 'installed' as const, version: displayVersion(entry.installedVersion) },
+			{ label: 'major', column: 'major' as const, version: displayVersion(entry.majorVersion) },
+			{ label: 'latest', column: 'latest' as const, version: displayVersion(entry.latestVersion) }
+		].find(cell => cell.column === focusedColumn)
+		return truncate(`${dim(active?.label ?? focusedColumn)} ${highlight(active?.version ?? symbols().missing)}`, width)
+	}
 	const versionWidth = Math.max(1, Math.floor((width - 27) / 4))
 	const cells: Array<{ label: string; column: VersionColumnT; version: string }> = [
 		{ label: 'decl', column: 'declared', version: stagedChange?.to ?? entry.declaredVersion },
@@ -247,7 +260,7 @@ const buildNarrowDetail = (
 			const version = padCell(cell.version, versionWidth)
 			return `${dim(cell.label)} ${focusedColumn === cell.column ? highlight(version) : version}`
 		})
-		.join(dim(' │ '))
+		.join(dim(` ${symbols().divider} `))
 		.trimEnd()
 }
 
@@ -274,7 +287,7 @@ export const buildDependencyScreen = (
 		if (focusedColumn !== undefined) filteredFocusedColumns.set(filteredIndex, focusedColumn)
 	})
 
-	const maximumViewportLines = Math.max(3, (process.stderr.rows ?? 24) - 6)
+	const maximumViewportLines = Math.max(1, getTerminalRows() - 7)
 	const viewport =
 		filteredEntries.length === 0
 			? undefined
@@ -287,12 +300,12 @@ export const buildDependencyScreen = (
 					mode,
 					width
 				)
-	const filterText = query.length === 0 ? dim('(type to filter…)') : query
-	const lines = [buildTitle(targetPackage, width), `${dim('filter:')} ${filterText}`]
+	const filterText = query.length === 0 ? dim(`(type to filter${symbols().range === '–' ? '…' : '...'})`) : query
+	const lines = [buildTitle(targetPackage, width), truncate(`${dim('filter:')} ${filterText}`, width)]
 
 	if (mode !== 'narrow') lines.push(buildColumnHeader(mode, width))
 	if (viewport === undefined) lines.push(dim(`  no dependencies match ${JSON.stringify(query)}`))
-	else lines.push(...viewport.lines)
+	else lines.push(...viewport.lines.map(line => truncate(line, width)))
 	if (mode === 'narrow' && viewport !== undefined) {
 		lines.push(
 			buildNarrowDetail(
@@ -308,22 +321,22 @@ export const buildDependencyScreen = (
 	const range =
 		query.length > 0
 			? viewport === undefined
-				? `dependencies 0 matches · ${entries.length} total`
+				? `dependencies 0 matches ${symbols().bullet} ${entries.length} total`
 				: isWindowed
-					? `dependencies ${viewport.startIndex + 1}–${viewport.endIndex} of ${filteredEntries.length} matches · ${entries.length} total`
-					: `dependencies ${filteredEntries.length} matches · ${entries.length} total`
+					? `dependencies ${viewport.startIndex + 1}${symbols().range}${viewport.endIndex} of ${filteredEntries.length} matches ${symbols().bullet} ${entries.length} total`
+					: `dependencies ${filteredEntries.length} matches ${symbols().bullet} ${entries.length} total`
 			: isWindowed && viewport !== undefined
-				? `dependencies ${viewport.startIndex + 1}–${viewport.endIndex} of ${entries.length}`
+				? `dependencies ${viewport.startIndex + 1}${symbols().range}${viewport.endIndex} of ${entries.length}`
 				: `dependencies ${entries.length}`
-	const staged = stagedChanges.size === 0 ? '' : ` · ${stagedChanges.size} staged`
+	const staged = stagedChanges.size === 0 ? '' : ` ${symbols().bullet} ${stagedChanges.size} staged`
 	lines.push(dim(centerLine(`${range}${staged}`, width)))
 
 	const controls =
 		mode === 'full'
-			? '↑↓ dependency · ←→ version · pgup/pgdn jump · enter review · esc clear/cancel'
+			? `${symbols().upDown} dependency ${symbols().bullet} ${symbols().leftRight} version ${symbols().bullet} pgup/pgdn jump ${symbols().bullet} enter review ${symbols().bullet} esc clear/cancel`
 			: mode === 'compact'
-				? '↑↓ row · ←→ version · pgup/pgdn · enter review · esc'
-				: '↑↓ row · ←→ version · enter · esc'
+				? `${symbols().upDown} row ${symbols().bullet} ${symbols().leftRight} version ${symbols().bullet} pgup/pgdn ${symbols().bullet} enter review ${symbols().bullet} esc`
+				: `${symbols().upDown} row ${symbols().bullet} ${symbols().leftRight} version ${symbols().bullet} enter ${symbols().bullet} esc`
 	lines.push(dim(truncate(controls, width)))
 	lines.push(status.length === 0 ? ' ' : truncate(status, width))
 	return lines
@@ -336,7 +349,7 @@ const listStagedChanges = (stagedChanges: Map<number, StagedChangeT>): StagedCha
 export const buildReviewScreen = (stagedChanges: Map<number, StagedChangeT>, offset = 0): string[] => {
 	const changes = listStagedChanges(stagedChanges)
 	const width = getTerminalWidth()
-	const pageSize = Math.max(1, (process.stderr.rows ?? 24) - 4)
+	const pageSize = Math.max(1, getTerminalRows() - 4)
 	const maximumOffset = Math.max(0, changes.length - pageSize)
 	const startIndex = Math.min(Math.max(0, offset), maximumOffset)
 	const visibleChanges = changes.slice(startIndex, startIndex + pageSize)
@@ -345,31 +358,24 @@ export const buildReviewScreen = (stagedChanges: Map<number, StagedChangeT>, off
 	const lines = [bold(`Review ${changes.length} change${changes.length === 1 ? '' : 's'}`), '']
 
 	for (const change of visibleChanges) {
-		const row = `  ${padCell(change.name, nameWidth)}  ${change.from}  →  ${change.to}`
+		const row = `  ${padCell(change.name, nameWidth)}  ${change.from}  ${symbols().arrow}  ${change.to}`
 		lines.push(truncate(row, width))
 	}
 
 	if (changes.length > pageSize) {
-		lines.push(dim(centerLine(`changes ${startIndex + 1}–${startIndex + visibleChanges.length} of ${changes.length}`, width)))
-		lines.push(dim(truncate('↑↓ scroll · pgup/pgdn jump · enter apply · esc go back', width)))
+		lines.push(dim(centerLine(`changes ${startIndex + 1}${symbols().range}${startIndex + visibleChanges.length} of ${changes.length}`, width)))
+		lines.push(dim(truncate(`${symbols().upDown} scroll ${symbols().bullet} pgup/pgdn jump ${symbols().bullet} enter apply ${symbols().bullet} esc go back`, width)))
 	} else {
-		lines.push(dim('enter apply · esc go back'))
+		lines.push(dim(truncate(`enter apply ${symbols().bullet} esc go back`, width)))
 	}
 	return lines
-}
-
-const clearRenderedLines = (lineCount: number): void => {
-	if (lineCount === 0) return
-	process.stderr.write('\r\u001B[2K')
-	for (let index = 1; index < lineCount; index += 1) process.stderr.write('\u001B[1A\r\u001B[2K')
 }
 
 const createKeypressQueue = (): KeypressQueueT => {
 	const queuedKeypresses: KeypressT[] = []
 	let waitingReader: ((keypress: KeypressT) => void) | undefined
 
-	const handleKeypress = (input: string | undefined, key: readline.Key): void => {
-		const keypress = { input, key }
+	const enqueue = (keypress: KeypressT): void => {
 		if (waitingReader === undefined) {
 			queuedKeypresses.push(keypress)
 			return
@@ -379,6 +385,7 @@ const createKeypressQueue = (): KeypressQueueT => {
 		waitingReader = undefined
 		resolve(keypress)
 	}
+	const handleKeypress = (input: string | undefined, key: readline.Key): void => enqueue({ input, key })
 
 	process.stdin.on('keypress', handleKeypress)
 
@@ -390,6 +397,7 @@ const createKeypressQueue = (): KeypressQueueT => {
 				waitingReader = resolve
 			})
 		},
+		cancel: () => enqueue({ input: undefined, key: { name: 'c', ctrl: true } }),
 		dispose: () => process.stdin.off('keypress', handleKeypress)
 	}
 }
@@ -440,15 +448,11 @@ export const runDependencyFlow = async (
 	entries: DependencyEntryT[],
 	targetPackage: TargetPackageT
 ): Promise<DependencyChangeT[]> => {
-	readline.emitKeypressEvents(process.stdin)
 	const keypressQueue = createKeypressQueue()
-	const wasRaw = process.stdin.isRaw
-	process.stdin.setRawMode(true)
-	process.stdin.resume()
-	process.stderr.write('\u001B[?25l')
+	const terminal = new LiveTerminal()
+	terminal.start()
 
 	let selectedIndex = 0
-	let renderedLineCount = 0
 	let status = ''
 	let query = ''
 	let screen: 'dependencies' | 'review' = 'dependencies'
@@ -456,6 +460,8 @@ export const runDependencyFlow = async (
 	const stagedChanges = new Map<number, StagedChangeT>()
 	const focusedColumns = new Map<number, VersionColumnT>()
 	let appliedChanges: DependencyChangeT[] = []
+	const handleResize = (): void => render()
+	const handleSignal = (): void => keypressQueue.cancel()
 
 	const stageChoice = (choice: VersionChoiceT): void => {
 		const entry = entries[selectedIndex]
@@ -476,32 +482,33 @@ export const runDependencyFlow = async (
 				to: targetVersion,
 				kind: choice
 			})
-			status = `${entry.name} ${dim(`${entry.declaredVersion} → ${targetVersion} staged`)}`
+			status = `${entry.name} ${dim(`${entry.declaredVersion} ${symbols().arrow} ${targetVersion} staged`)}`
 		}
 	}
 
 	const render = (): void => {
-		clearRenderedLines(renderedLineCount)
 		const lines =
 			screen === 'dependencies'
 				? buildDependencyScreen(entries, targetPackage, selectedIndex, stagedChanges, status, focusedColumns, query)
 				: buildReviewScreen(stagedChanges, reviewOffset)
-		process.stderr.write(lines.join('\n'))
-		renderedLineCount = lines.length
+		terminal.render(lines)
 	}
 
 	try {
+		process.stderr.on('resize', handleResize)
+		process.once('SIGINT', handleSignal)
+		process.once('SIGTERM', handleSignal)
 		render()
 
 		for (;;) {
 			const { input, key } = await keypressQueue.read()
-			if (key.ctrl === true && key.name === 'c') break
+			if (key.ctrl === true && key.name === 'c') throw new CancelledError()
 
-			const pageSize = Math.max(1, (process.stderr.rows ?? 24) - 9)
+			const pageSize = Math.max(1, getTerminalRows() - 9)
 
 			if (screen === 'review') {
 				const changes = listStagedChanges(stagedChanges)
-				const reviewPageSize = Math.max(1, (process.stderr.rows ?? 24) - 4)
+				const reviewPageSize = Math.max(1, getTerminalRows() - 4)
 				const maximumOffset = Math.max(0, changes.length - reviewPageSize)
 
 				if (key.name === 'escape') {
@@ -625,11 +632,11 @@ export const runDependencyFlow = async (
 			}
 		}
 	} finally {
+		process.stderr.off('resize', handleResize)
+		process.off('SIGINT', handleSignal)
+		process.off('SIGTERM', handleSignal)
 		keypressQueue.dispose()
-		clearRenderedLines(renderedLineCount)
-		process.stderr.write('\u001B[?25h')
-		process.stdin.setRawMode(wasRaw === true)
-		process.stdin.pause()
+		terminal.dispose()
 	}
 
 	return appliedChanges

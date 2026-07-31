@@ -5,6 +5,7 @@ import type { TargetPackageT } from './types.js'
 
 export type RunOutcomeT = {
 	exitCode: number
+	error?: string
 }
 
 // Only npm needs the `--` separator: without it npm eats the
@@ -53,8 +54,10 @@ export const runScript = async (
 	const isSpawnFailure = result.failed === true
 	if (!isSpawnFailure) return { exitCode: 0 }
 
-	process.stderr.write(`abt could not run "${packageManager}". Is it installed and on your PATH?\n`)
-	return { exitCode: 127 }
+	return {
+		exitCode: 127,
+		error: `abt could not run "${packageManager}". Install it or make it available on PATH.`
+	}
 }
 
 export const describeRunCommand = (

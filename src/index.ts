@@ -4,13 +4,18 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { buildContext } from './buildContext.js'
+import { detectEnvironment } from './environment.js'
+import { CliError, usageError } from './errors.js'
 import { parseArguments } from './parseArguments.js'
-import { printError, printHelp, printScriptList, printVersion } from './printers.js'
+import { listScripts, printError, printHelp } from './printers.js'
 import { resolveTarget } from './resolveTarget.js'
 import { runInteractiveFlow, runPackageScriptFlow } from './flow.js'
 import { describeRunCommand, runScript } from './runScript.js'
-import { dim } from './theme.js'
+import { configureTheme, dim } from './theme.js'
 import { runDependencyCommand } from './dependencyCommand.js'
+import { configureOutput, writeJsonError } from './output.js'
+import { createRenderer } from './renderer.js'
+import type { CliRendererT } from './renderer.js'
 import type { ResolutionT } from './resolveTarget.js'
 import type { ContextT } from './types.js'
 
@@ -23,33 +28,46 @@ const readSelfVersion = (): string => {
 	return selfPackage.version
 }
 
-const checkIsInteractiveTerminal = (): boolean => {
-	return process.stdin.isTTY === true && process.stderr.isTTY === true
-}
-
 const describeSuggestion = (suggestion: string | undefined): string => {
 	const hasNoSuggestion = suggestion === undefined
 	if (hasNoSuggestion) return ''
-	return ` ${dim(`did you mean "${suggestion}"?`)}`
+	return ` Did you mean "${suggestion}"?`
 }
 
-const reportUnknownScript = (resolution: Extract<ResolutionT, { kind: 'unknownScript' }>): number => {
+const reportUnknownScript = (
+	resolution: Extract<ResolutionT, { kind: 'unknownScript' }>,
+	renderer: CliRendererT
+): number => {
 	const locationName = resolution.targetPackage.relativePath
 	const isRootPackage = locationName === '.'
 	const locationSuffix = isRootPackage ? '' : ` in ${locationName}`
-	printError(`no script named "${resolution.typedName}"${locationSuffix}.${describeSuggestion(resolution.suggestion)}`)
+	renderer.emit({
+		type: 'notice',
+		level: 'error',
+		title: `abt no script named "${resolution.typedName}"${locationSuffix}.${describeSuggestion(resolution.suggestion)}`,
+		body: 'Run "abt --list" to see available scripts.'
+	})
 	return 1
 }
 
-const reportUnknownPackage = (resolution: Extract<ResolutionT, { kind: 'unknownPackage' }>): number => {
-	printError(`no workspace package named "${resolution.typedName}".${describeSuggestion(resolution.suggestion)}`)
+const reportUnknownPackage = (
+	resolution: Extract<ResolutionT, { kind: 'unknownPackage' }>,
+	renderer: CliRendererT
+): number => {
+	renderer.emit({
+		type: 'notice',
+		level: 'error',
+		title: `abt no workspace package named "${resolution.typedName}".${describeSuggestion(resolution.suggestion)}`,
+		body: 'Run "abt --list" to see scripts and their package paths.'
+	})
 	return 1
 }
 
 const runResolvedScript = async (
 	context: ContextT,
 	resolution: Extract<ResolutionT, { kind: 'run' }>,
-	forwardedArguments: string[]
+	forwardedArguments: string[],
+	renderer: CliRendererT
 ): Promise<number> => {
 	const commandDescription = describeRunCommand(
 		resolution.targetPackage,
@@ -57,7 +75,7 @@ const runResolvedScript = async (
 		context.workspace.rootDirectory
 	)
 
-	process.stderr.write(`${dim(`› ${commandDescription}`)}\n\n`)
+	renderer.emit({ type: 'command:run', description: commandDescription })
 
 	const outcome = await runScript(
 		resolution.targetPackage,
@@ -65,6 +83,7 @@ const runResolvedScript = async (
 		context.workspace.rootDirectory,
 		forwardedArguments
 	)
+	if (outcome.error !== undefined) renderer.emit({ type: 'notice', level: 'error', title: outcome.error })
 
 	return outcome.exitCode
 }
@@ -72,25 +91,30 @@ const runResolvedScript = async (
 const handleResolution = async (
 	context: ContextT,
 	resolution: ResolutionT,
-	forwardedArguments: string[]
+	forwardedArguments: string[],
+	canPrompt: boolean,
+	renderer: CliRendererT
 ): Promise<number> => {
 	const isRun = resolution.kind === 'run'
-	if (isRun) return await runResolvedScript(context, resolution, forwardedArguments)
+	if (isRun) return await runResolvedScript(context, resolution, forwardedArguments, renderer)
 
 	const isUnknownScript = resolution.kind === 'unknownScript'
-	if (isUnknownScript) return reportUnknownScript(resolution)
+	if (isUnknownScript) return reportUnknownScript(resolution, renderer)
 
 	const isUnknownPackage = resolution.kind === 'unknownPackage'
-	if (isUnknownPackage) return reportUnknownPackage(resolution)
-
-	const canPrompt = checkIsInteractiveTerminal()
+	if (isUnknownPackage) return reportUnknownPackage(resolution, renderer)
 
 	if (!canPrompt) {
-		printError(`"${resolution.targetPackage.relativePath}" is a package, not a script. Name a script to run.`)
+		renderer.emit({
+			type: 'notice',
+			level: 'error',
+			title: `abt "${resolution.targetPackage.relativePath}" is a package, not a script.`,
+			body: 'Name a script to run, or run "abt --list" to see available scripts.'
+		})
 		return 1
 	}
 
-	const outcome = await runPackageScriptFlow(context, resolution.targetPackage, forwardedArguments)
+	const outcome = await runPackageScriptFlow(context, resolution.targetPackage, forwardedArguments, renderer)
 	return outcome.exitCode
 }
 
@@ -104,9 +128,14 @@ const countScriptsInWorkspace = (context: ContextT): number => {
 
 const main = async (): Promise<number> => {
 	const split = parseArguments(process.argv.slice(2))
+	const environment = detectEnvironment(split.parsed)
+	configureTheme(environment)
+	configureOutput(environment)
+	const renderer = createRenderer(environment)
+	try {
 
 	if (split.parsed.wantsVersion) {
-		printVersion(readSelfVersion())
+		renderer.emit({ type: 'version', version: readSelfVersion() })
 		return 0
 	}
 
@@ -114,62 +143,94 @@ const main = async (): Promise<number> => {
 		printHelp(readSelfVersion())
 		return 0
 	}
+	const wantsDependencies = split.parsed.positionals[0] === 'deps'
+	if (split.parsed.wantsList && split.parsed.positionals.length > 0) {
+		throw usageError('--list cannot be combined with a command or script name.')
+	}
+	if ((split.parsed.updates.length > 0 || split.parsed.dryRun) && !wantsDependencies) {
+		throw usageError('--update and --dry-run can only be used with abt deps.')
+	}
+	if (environment.json && !split.parsed.wantsList && !wantsDependencies) {
+		throw usageError('--json requires --list or the deps command.')
+	}
 
 	const context = buildContext(process.cwd())
+	if (environment.verbose) {
+		renderer.emit({ type: 'notice', level: 'info', title: `abt workspace ${context.workspace.rootDirectory}`, verboseOnly: true })
+		renderer.emit({ type: 'notice', level: 'info', title: `abt package ${context.currentPackage.relativePath}`, verboseOnly: true })
+	}
 
 	if (split.parsed.wantsList) {
-		printScriptList(context)
+		renderer.emit({ type: 'script:list', scripts: listScripts(context) })
 		return 0
 	}
 
-	const wantsDependencies = split.parsed.positionals[0] === 'deps'
 	if (wantsDependencies) {
-		return await runDependencyCommand(context, split.parsed.positionals.slice(1), checkIsInteractiveTerminal())
+		return await runDependencyCommand(context, split.parsed.positionals.slice(1), {
+			interactive: environment.interactive,
+			dryRun: split.parsed.dryRun,
+			updates: split.parsed.updates,
+			renderer
+		})
 	}
 
 	const resolution = resolveTarget(context, split.parsed.positionals)
 	const wasTargetNamed = resolution !== undefined
-	if (wasTargetNamed) return await handleResolution(context, resolution, split.forwardedArguments)
+	if (wasTargetNamed) {
+		return await handleResolution(context, resolution, split.forwardedArguments, environment.interactive, renderer)
+	}
 
 	const totalScriptCount = countScriptsInWorkspace(context)
 	const hasNoScripts = totalScriptCount === 0
 
 	if (hasNoScripts) {
-		printError('no scripts found in package.json.')
+		renderer.emit({ type: 'script:list', scripts: [] })
 		return 0
 	}
 
 	// Nobody can answer a prompt in a pipe or in CI, so print the
 	// list instead of blocking on a menu that will never resolve.
-	const canPrompt = checkIsInteractiveTerminal()
-
-	if (!canPrompt) {
-		printScriptList(context)
+	if (!environment.interactive) {
+		renderer.emit({ type: 'script:list', scripts: listScripts(context) })
 		return 0
 	}
 
-	const outcome = await runInteractiveFlow(context, split.forwardedArguments)
+	const outcome = await runInteractiveFlow(context, split.forwardedArguments, renderer)
 	return outcome.exitCode
+	} finally {
+		await renderer.flush()
+		await renderer.dispose()
+	}
 }
 
-// Ctrl+C is an ordinary way to leave a menu, not a crash, and a
-// user error never deserves a stack trace.
 const handleError = (error: unknown): number => {
-	const wasCancelled = error instanceof Error && error.name === 'ExitPromptError'
-	if (wasCancelled) return 0
-
-	const message = error instanceof Error ? error.message : String(error)
-	printError(message)
-	return 1
+	const cliError =
+		error instanceof CliError
+			? error
+			: new CliError({
+					message: error instanceof Error ? error.message : String(error),
+					code: 'ABT_RUNTIME',
+					recovery: 'Run again with --debug for diagnostic details.'
+				})
+	const wantsJson = process.argv.slice(2).includes('--json')
+	if (wantsJson) writeJsonError(cliError)
+	else {
+		printError(cliError.message)
+		if (cliError.recovery !== undefined) process.stderr.write(`    ${dim(cliError.recovery)}\n`)
+		if (process.argv.slice(2).includes('--debug') && error instanceof Error && error.stack !== undefined) {
+			process.stderr.write(`${error.stack}\n`)
+		}
+	}
+	return cliError.exitCode
 }
 
 const start = async (): Promise<void> => {
 	try {
 		const exitCode = await main()
-		process.exit(exitCode)
+		process.exitCode = exitCode
 	} catch (error) {
 		const exitCode = handleError(error)
-		process.exit(exitCode)
+		process.exitCode = exitCode
 	}
 }
 

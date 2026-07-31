@@ -7,7 +7,8 @@ import {
 } from './buildMenuRows.js'
 import { runFuzzySelect } from './fuzzySelect.js'
 import { describeRunCommand, runScript } from './runScript.js'
-import { accent, dim } from './theme.js'
+import { accent, dim, symbols } from './theme.js'
+import type { CliRendererT } from './renderer.js'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
 
 const ANSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
@@ -25,10 +26,10 @@ const describeLocation = (targetPackage: TargetPackageT): string => {
 }
 
 const buildLocationHeader = (targetPackage: TargetPackageT): string => {
-	return `${accent('abt')} ${dim('·')} ${describeLocation(targetPackage)}`
+	return `${accent('abt')} ${dim(symbols().bullet)} ${describeLocation(targetPackage)}`
 }
 
-const CHOOSE_SCRIPT_HEADER = '[ abt ∆ choose a script ]'
+const chooseScriptHeader = (): string => `[ abt ${symbols().delta} choose a script ]`
 
 export type FlowOutcomeT = {
 	exitCode: number
@@ -38,7 +39,8 @@ export type FlowOutcomeT = {
 export const runInteractiveFlow = async (
 	context: ContextT,
 	forwardedArguments: string[],
-	header = CHOOSE_SCRIPT_HEADER
+	renderer: CliRendererT,
+	header = chooseScriptHeader()
 ): Promise<FlowOutcomeT> => {
 	const hasOtherPackages = context.isWorkspace && listBrowsablePackages(context).length > 1
 	let targetPackage = context.currentPackage
@@ -49,7 +51,7 @@ export const runInteractiveFlow = async (
 	for (;;) {
 		if (screen === 'packages') {
 			const packageOutcome = await runFuzzySelect({
-				title: `${accent('abt')} ${dim('·')} packages`,
+				title: `${accent('abt')} ${dim(symbols().bullet)} packages`,
 				items: buildItems(buildPackageMenuRows(context)),
 				canGoBack: true
 			})
@@ -90,8 +92,12 @@ export const runInteractiveFlow = async (
 
 		const scriptName = readRunValue(scriptOutcome.value)
 		if (scriptName === undefined) continue
-		process.stderr.write(`${dim(`› ${describeRunCommand(targetPackage, scriptName, context.workspace.rootDirectory)}`)}\n\n`)
+		renderer.emit({
+			type: 'command:run',
+			description: describeRunCommand(targetPackage, scriptName, context.workspace.rootDirectory)
+		})
 		const outcome = await runScript(targetPackage, scriptName, context.workspace.rootDirectory, forwardedArguments)
+		if (outcome.error !== undefined) renderer.emit({ type: 'notice', level: 'error', title: outcome.error })
 		return { exitCode: outcome.exitCode, wasCancelled: false }
 	}
 }
@@ -99,7 +105,8 @@ export const runInteractiveFlow = async (
 export const runPackageScriptFlow = async (
 	context: ContextT,
 	targetPackage: TargetPackageT,
-	forwardedArguments: string[]
+	forwardedArguments: string[],
+	renderer: CliRendererT
 ): Promise<FlowOutcomeT> => {
 	const scopedContext: ContextT = {
 		workspace: context.workspace,
@@ -107,5 +114,5 @@ export const runPackageScriptFlow = async (
 		isWorkspace: false
 	}
 
-	return await runInteractiveFlow(scopedContext, forwardedArguments, buildLocationHeader(targetPackage))
+	return await runInteractiveFlow(scopedContext, forwardedArguments, renderer, buildLocationHeader(targetPackage))
 }

@@ -55,11 +55,19 @@ Workspaces are detected from `pnpm-workspace.yaml` or a `workspaces` field in
 In a pipe or in CI, `abt` prints the script list instead of blocking on a menu
 nobody can answer. It always exits with the script's own exit code.
 
+Use `--json` with `--list` for structured script data. `--no-interactive`,
+`--no-color`, and `--no-unicode` provide explicit overrides for automation and
+constrained terminals. `--quiet`, `--verbose`, and `--debug` control diagnostic
+detail without changing the command result written to standard output.
+
 ## Dependencies
 
 ```sh
 abt deps               # dependencies of the package you are in
 abt deps web           # dependencies of a workspace package
+abt deps --update typescript=major --dry-run
+abt deps --update typescript=major --update execa=latest
+abt deps --json
 ```
 
 `abt deps` presents `dependencies`, `peerDependencies`, and `devDependencies`
@@ -96,9 +104,40 @@ Applying updates only the selected values in `package.json`; it does not install
 packages or rewrite the lockfile. The final message reminds you to run your
 package manager's install command.
 
+For automation, repeat `--update <package>=installed|major|latest`. The choice is
+explicit, so no confirmation prompt is opened. Add `--dry-run` to produce the
+same change receipt without writing `package.json`.
+
 Workspace, file, URL, Git, and npm-alias specs are still listed, but registry
 updates are disabled for them. If the command is piped or run in CI, it prints a
 tab-separated report and never attempts an edit.
+
+### JSON contract
+
+`abt --version --json`, `abt --list --json`, and `abt deps --json` write exactly
+one JSON document to standard output and never include ANSI control sequences.
+Successful documents have `ok: true` plus a stable `command` discriminator.
+Script results use a `scripts` array; dependency reports use `package`,
+`dependencies`, and `changes`; dependency updates additionally use `dryRun`.
+
+Failures use this shape and a nonzero exit status:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "ABT_USAGE",
+    "category": "usage",
+    "message": "unknown option \"--wat\".",
+    "recovery": "Run \"abt --help\" for usage."
+  }
+}
+```
+
+Exit statuses are `0` for success, `1` for an internal runtime failure, `2` for
+usage/environment errors, `127` when the package manager cannot start, and
+`130` when an interactive operation is cancelled with Ctrl+C. Executed scripts
+otherwise preserve their own exit status.
 
 ## Design
 
@@ -115,6 +154,13 @@ same-major, and latest versions; staged column actions; a before/after review
 screen; fuzzy filtering; viewport-aware navigation; workspace package
 targeting; and a plain non-interactive report. Script and package menus now
 support the same type-to-filter interaction.
+
+Added strict option validation, explicit terminal capability overrides,
+ASCII-safe narrow rendering, resize and signal cleanup, non-interactive
+dependency updates with dry-run, stable JSON results/errors, and separated
+plain, interactive, JSON, silent, and test renderers.
+Replaced the Pathenger menu dependency with the native fuzzy selector used by
+both scripts and dependencies.
 
 ### 4.0.0
 

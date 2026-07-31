@@ -1,6 +1,8 @@
 import readline from 'node:readline'
+import { CancelledError } from './errors.js'
 import { fuzzyFilter } from './fuzzy.js'
-import { accent, dim, getTerminalWidth, truncate } from './theme.js'
+import { LiveTerminal } from './liveTerminal.js'
+import { accent, dim, getTerminalRows, getTerminalWidth, symbols, truncate } from './theme.js'
 
 export type FuzzySelectItemT = {
 	label: string
@@ -16,18 +18,11 @@ export type FuzzySelectOutcomeT =
 
 type KeypressT = { input: string | undefined; key: readline.Key }
 
-const clearRenderedLines = (lineCount: number): void => {
-	if (lineCount === 0) return
-	process.stderr.write('\r\u001B[2K')
-	for (let index = 1; index < lineCount; index += 1) process.stderr.write('\u001B[1A\r\u001B[2K')
-}
-
 const createKeypressQueue = () => {
 	const queuedKeypresses: KeypressT[] = []
 	let waitingReader: ((keypress: KeypressT) => void) | undefined
 
-	const handleKeypress = (input: string | undefined, key: readline.Key): void => {
-		const keypress = { input, key }
+	const enqueue = (keypress: KeypressT): void => {
 		if (waitingReader === undefined) queuedKeypresses.push(keypress)
 		else {
 			const resolve = waitingReader
@@ -35,6 +30,7 @@ const createKeypressQueue = () => {
 			resolve(keypress)
 		}
 	}
+	const handleKeypress = (input: string | undefined, key: readline.Key): void => enqueue({ input, key })
 
 	process.stdin.on('keypress', handleKeypress)
 	return {
@@ -45,6 +41,7 @@ const createKeypressQueue = () => {
 				waitingReader = resolve
 			})
 		},
+		cancel: () => enqueue({ input: undefined, key: { name: 'c', ctrl: true } }),
 		dispose: () => process.stdin.off('keypress', handleKeypress)
 	}
 }
@@ -71,56 +68,56 @@ export const runFuzzySelect = async (config: {
 	canGoBack?: boolean
 	canOpenPackages?: boolean
 }): Promise<FuzzySelectOutcomeT> => {
-	readline.emitKeypressEvents(process.stdin)
 	const keypressQueue = createKeypressQueue()
-	const wasRaw = process.stdin.isRaw
-	process.stdin.setRawMode(true)
-	process.stdin.resume()
-	process.stderr.write('\u001B[?25l')
+	const terminal = new LiveTerminal()
+	terminal.start()
 
 	let query = ''
 	let selectedIndex = 0
-	let renderedLineCount = 0
+	const handleResize = (): void => render()
+	const handleSignal = (): void => keypressQueue.cancel()
 
 	const listMatches = (): FuzzySelectItemT[] => fuzzyFilter(config.items, query, item => item.searchText)
 
 	const render = (): void => {
-		clearRenderedLines(renderedLineCount)
 		const matches = listMatches()
 		selectedIndex = Math.max(0, Math.min(selectedIndex, Math.max(0, matches.length - 1)))
-		const pageSize = Math.max(1, (process.stderr.rows ?? 24) - 4)
+		const pageSize = Math.max(1, getTerminalRows() - 4)
 		const visibleItems = buildVisibleItems(matches, selectedIndex, pageSize)
 		const firstVisibleIndex = visibleItems.length === 0 ? 0 : matches.indexOf(visibleItems[0])
 		const width = getTerminalWidth()
-		const filterText = query.length === 0 ? dim('(type to filter…)') : query
+		const marks = symbols()
+		const filterText = query.length === 0 ? dim(`(type to filter${marks.range === '–' ? '…' : '...'})`) : query
 		const lines = [truncate(config.title, width), `${dim('filter:')} ${filterText}`]
 
 		if (visibleItems.length === 0) lines.push(dim(`  no matches for ${JSON.stringify(query)}`))
 		else {
 			visibleItems.forEach((item, visibleIndex) => {
 				const itemIndex = firstVisibleIndex + visibleIndex
-				const cursor = itemIndex === selectedIndex ? accent('❯') : ' '
+				const cursor = itemIndex === selectedIndex ? accent(marks.cursor) : ' '
 				const label = itemIndex === selectedIndex ? item.label : dim(item.label)
-				lines.push(`${cursor} ${label}`)
+				lines.push(truncate(`${cursor} ${label}`, width))
 			})
 		}
 
 		const resultRange =
 			matches.length > pageSize
-				? ` · ${firstVisibleIndex + 1}–${firstVisibleIndex + visibleItems.length} of ${matches.length}`
+				? ` ${marks.bullet} ${firstVisibleIndex + 1}${marks.range}${firstVisibleIndex + visibleItems.length} of ${matches.length}`
 				: ''
 		const backLabel = query.length > 0 ? 'esc clear' : config.canGoBack === true ? 'esc back' : 'esc cancel'
-		const packageLabel = config.canOpenPackages === true ? ' · tab packages' : ''
-		lines.push(dim(truncate(`↑↓ move · enter select · ${backLabel}${packageLabel}${resultRange}`, width)))
-		process.stderr.write(lines.join('\n'))
-		renderedLineCount = lines.length
+		const packageLabel = config.canOpenPackages === true ? ` ${marks.bullet} tab packages` : ''
+		lines.push(dim(truncate(`${marks.upDown} move ${marks.bullet} enter select ${marks.bullet} ${backLabel}${packageLabel}${resultRange}`, width)))
+		terminal.render(lines)
 	}
 
 	try {
+		process.stderr.on('resize', handleResize)
+		process.once('SIGINT', handleSignal)
+		process.once('SIGTERM', handleSignal)
 		render()
 		for (;;) {
 			const { input, key } = await keypressQueue.read()
-			if (key.ctrl === true && key.name === 'c') return { kind: 'cancelled' }
+			if (key.ctrl === true && key.name === 'c') throw new CancelledError()
 
 			if (key.name === 'escape') {
 				if (query.length > 0) {
@@ -146,14 +143,14 @@ export const runFuzzySelect = async (config: {
 				continue
 			}
 			if (key.name === 'pageup') {
-				selectedIndex = Math.max(0, selectedIndex - Math.max(1, (process.stderr.rows ?? 24) - 4))
+				selectedIndex = Math.max(0, selectedIndex - Math.max(1, getTerminalRows() - 4))
 				render()
 				continue
 			}
 			if (key.name === 'pagedown') {
 				selectedIndex = Math.max(
 					0,
-					Math.min(matches.length - 1, selectedIndex + Math.max(1, (process.stderr.rows ?? 24) - 4))
+					Math.min(matches.length - 1, selectedIndex + Math.max(1, getTerminalRows() - 4))
 				)
 				render()
 				continue
@@ -174,10 +171,10 @@ export const runFuzzySelect = async (config: {
 			}
 		}
 	} finally {
+		process.stderr.off('resize', handleResize)
+		process.off('SIGINT', handleSignal)
+		process.off('SIGTERM', handleSignal)
 		keypressQueue.dispose()
-		clearRenderedLines(renderedLineCount)
-		process.stderr.write('\u001B[?25h')
-		process.stdin.setRawMode(wasRaw === true)
-		process.stdin.pause()
+		terminal.dispose()
 	}
 }

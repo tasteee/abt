@@ -1,5 +1,5 @@
 import { buildShortName } from './packageNames.js'
-import { dim, flattenCommand, getTerminalWidth, truncate } from './theme.js'
+import { dim, flattenCommand, getTerminalWidth, symbols, truncate } from './theme.js'
 import type { ContextT, MenuRowT, TargetPackageT } from './types.js'
 
 // Menu values are self-describing so the flow can branch on a
@@ -94,11 +94,11 @@ export const buildPackageMenuRows = (context: ContextT): MenuRowT[] => {
 	const rawRows = browsablePackages.map(browsablePackage => {
 		const isCurrent = browsablePackage.directory === context.currentPackage.directory
 		const locationName = browsablePackage.isRoot ? 'workspace root' : browsablePackage.relativePath
-		const currentMarker = isCurrent ? ' · you are here' : ''
+		const currentMarker = isCurrent ? ` ${symbols().bullet} you are here` : ''
 
 		return {
 			name: buildShortName(browsablePackage),
-			detail: `${describeScriptCount(browsablePackage)} · ${locationName}${currentMarker}`,
+			detail: `${describeScriptCount(browsablePackage)} ${symbols().bullet} ${locationName}${currentMarker}`,
 			value: buildOpenValue(browsablePackage.relativePath)
 		}
 	})
